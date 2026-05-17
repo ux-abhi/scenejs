@@ -150,8 +150,23 @@
       --poster-color: #111;
     }
 
-    /* ─── AR BUTTON (inside model-viewer slot) ─────────── */
+    /* ─── AR FOOTER ────────────────────────────────────── */
+    #ar-footer {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 20px 24px max(env(safe-area-inset-bottom), 24px);
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+
     #ar-btn {
+      width: 100%;
+      max-width: 320px;
       background: var(--blue);
       color: #fff;
       border: none;
@@ -160,15 +175,23 @@
       font-size: 17px;
       font-weight: 700;
       cursor: pointer;
-      box-shadow: 0 4px 24px rgba(58,134,255,0.45);
+      box-shadow: 0 4px 24px rgba(58,134,255,0.4);
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 8px;
       min-height: 56px;
-      white-space: nowrap;
+    }
+    #ar-btn:disabled {
+      opacity: 0.45;
+      box-shadow: none;
     }
 
-    /* model-viewer positions slot="ar-button" at bottom-centre automatically */
+    #ar-status {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-align: center;
+    }
 
     /* ─── TOAST ─────────────────────────────────────────── */
     #toast {
@@ -225,12 +248,14 @@
     auto-rotate
     shadow-intensity="1"
     alt="3D model"
-  >
-    <!-- This button appears only when AR is available on the device -->
-    <button slot="ar-button" id="ar-btn">
+  ></model-viewer>
+
+  <div id="ar-footer">
+    <button id="ar-btn" disabled onclick="startAR()">
       <span>📷</span> Place in Your Room
     </button>
-  </model-viewer>
+    <p id="ar-status">Loading model…</p>
+  </div>
 
 </div>
 
@@ -251,12 +276,41 @@ document.addEventListener('DOMContentLoaded', () => {
   buildPickerGrid();
 
   const viewer = document.getElementById('model-view');
+
+  viewer.addEventListener('load', () => {
+    const btn    = document.getElementById('ar-btn');
+    const status = document.getElementById('ar-status');
+    btn.disabled = false;
+    if (viewer.canActivateAR) {
+      status.textContent = 'Tap to place it in your space';
+    } else {
+      status.textContent = 'AR needs iOS Safari or Android Chrome over HTTPS';
+    }
+  });
+
+  viewer.addEventListener('error', () => {
+    document.getElementById('ar-status').textContent = 'Failed to load model';
+  });
+
   viewer.addEventListener('ar-status', (e) => {
     if (e.detail.status === 'failed') {
-      showToast('AR not supported on this browser — try iOS Safari or Android Chrome');
+      showToast('Could not start AR — check camera permissions and try again');
     }
   });
 });
+
+async function startAR() {
+  const viewer = document.getElementById('model-view');
+  if (!viewer.canActivateAR) {
+    showToast('AR not available — needs iOS Safari 15.4+ or Android Chrome over HTTPS');
+    return;
+  }
+  try {
+    await viewer.activateAR();
+  } catch (e) {
+    showToast('AR failed to start: ' + (e.message || e));
+  }
+}
 
 // ─── PICKER ──────────────────────────────────────────────
 function buildPickerGrid() {
@@ -296,6 +350,8 @@ function showPicker() {
   showScreen('picker-screen');
   const viewer = document.getElementById('model-view');
   viewer.src = '';
+  document.getElementById('ar-btn').disabled = true;
+  document.getElementById('ar-status').textContent = 'Loading model…';
 }
 
 function selectModel(modelId) {
