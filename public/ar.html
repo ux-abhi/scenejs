@@ -103,24 +103,9 @@
       to { transform: scale(4); opacity: 0; }
     }
 
-    .card-emoji {
-      font-size: 36px;
-      line-height: 1;
-    }
-
-    .card-name {
-      font-size: 13px;
-      font-weight: 700;
-      color: var(--text);
-      text-align: center;
-    }
-
-    .card-desc {
-      font-size: 11px;
-      color: var(--text-muted);
-      text-align: center;
-      line-height: 1.3;
-    }
+    .card-emoji { font-size: 36px; line-height: 1; }
+    .card-name { font-size: 13px; font-weight: 700; color: var(--text); text-align: center; }
+    .card-desc { font-size: 11px; color: var(--text-muted); text-align: center; line-height: 1.3; }
 
     .card-btn {
       margin-top: 4px;
@@ -139,7 +124,7 @@
 
     .card-btn:active { background: #2266dd; }
 
-    /* ─── PERMISSION ERROR SCREEN ───────────────────────── */
+    /* ─── PERMISSION ERROR ──────────────────────────────── */
     #permission-error {
       background: var(--bg);
       display: flex;
@@ -155,7 +140,6 @@
     #permission-error h2 { font-size: 20px; font-weight: 700; }
     #permission-error p { font-size: 14px; color: var(--text-muted); line-height: 1.6; max-width: 300px; }
     #permission-error button {
-      margin-top: 8px;
       background: var(--blue);
       color: #fff;
       border: none;
@@ -168,17 +152,34 @@
     }
 
     /* ─── STATE 2 & 3: AR VIEW ───────────────────────────── */
-    #ar-screen {
-      background: #000;
+    #ar-screen { background: #000; }
+
+    /* Camera feed video — fills screen behind everything */
+    #camera-bg {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      z-index: 0;
     }
 
-    /* A-Frame fills the screen */
-    #ar-screen a-scene {
-      position: absolute;
-      inset: 0;
-      width: 100% !important;
-      height: 100% !important;
+    /* A-Frame canvas — transparent, sits above video */
+    #ar-scene {
+      position: fixed !important;
+      top: 0 !important; left: 0 !important;
+      width: 100% !important; height: 100% !important;
+      z-index: 1;
     }
+
+    #ar-scene canvas {
+      position: fixed !important;
+      top: 0 !important; left: 0 !important;
+      width: 100% !important; height: 100% !important;
+      background: transparent !important;
+    }
+
+    /* Hide A-Frame's built-in UI chrome */
+    .a-enter-vr, .a-enter-ar, .rs-base { display: none !important; }
 
     /* ─── TOP TOOLBAR ───────────────────────────────────── */
     #ar-toolbar {
@@ -222,7 +223,6 @@
     }
 
     .toolbar-btn:active { background: rgba(255,255,255,0.2); }
-
     .toolbar-btn.danger { background: rgba(220,53,69,0.2); border-color: rgba(220,53,69,0.3); }
     .toolbar-btn.danger:active { background: rgba(220,53,69,0.35); }
 
@@ -261,7 +261,7 @@
       bottom: calc(env(safe-area-inset-bottom) + 96px);
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(0,0,0,0.6);
+      background: rgba(0,0,0,0.65);
       color: #fff;
       font-size: 14px;
       font-weight: 600;
@@ -284,7 +284,7 @@
     #ar-loading {
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.85);
+      background: rgba(0,0,0,0.88);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -311,8 +311,7 @@
     /* ─── STATE 3: BOTTOM SHEET ─────────────────────────── */
     #transform-sheet {
       position: fixed;
-      left: 0; right: 0;
-      bottom: 0;
+      left: 0; right: 0; bottom: 0;
       background: var(--sheet-bg);
       border-top-left-radius: 20px;
       border-top-right-radius: 20px;
@@ -334,9 +333,7 @@
       margin: 12px auto 20px;
     }
 
-    .sheet-section {
-      margin-bottom: 20px;
-    }
+    .sheet-section { margin-bottom: 20px; }
 
     .sheet-label {
       font-size: 11px;
@@ -347,12 +344,7 @@
       margin-bottom: 10px;
     }
 
-    /* Resize slider */
-    .slider-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
+    .slider-row { display: flex; align-items: center; gap: 12px; }
 
     .slider-row input[type=range] {
       -webkit-appearance: none;
@@ -388,11 +380,7 @@
       text-align: right;
     }
 
-    /* Rotate buttons */
-    .rotate-row {
-      display: flex;
-      gap: 10px;
-    }
+    .rotate-row { display: flex; gap: 10px; }
 
     .rotate-btn {
       flex: 1;
@@ -412,11 +400,7 @@
 
     .rotate-btn:active { background: rgba(255,255,255,0.14); }
 
-    /* Action buttons */
-    .action-row {
-      display: flex;
-      gap: 10px;
-    }
+    .action-row { display: flex; gap: 10px; }
 
     .action-btn {
       flex: 1;
@@ -461,38 +445,10 @@
 
     .sheet-done-btn:active { background: #2a2a2a; }
 
-    /* ─── OBJECT HIGHLIGHT ──────────────────────────────── */
     @keyframes highlight-pulse {
       0%, 100% { opacity: 1; }
-      50% { opacity: 0.75; }
+      50% { opacity: 0.7; }
     }
-
-    .selected-entity {
-      animation: highlight-pulse 0.8s ease-in-out 2;
-    }
-
-    /* ─── iOS CAMERA FEED FIXES ─────────────────────────── */
-    /* AR.js injects a <video> element; force it to fill screen */
-    video {
-      position: fixed !important;
-      top: 0 !important; left: 0 !important;
-      width: 100vw !important;
-      height: 100vh !important;
-      object-fit: cover !important;
-      z-index: 0 !important;
-    }
-
-    /* A-Frame canvas must sit above video but stay transparent */
-    #ar-scene canvas {
-      position: fixed !important;
-      top: 0 !important; left: 0 !important;
-      width: 100% !important;
-      height: 100% !important;
-      z-index: 1 !important;
-    }
-
-    /* AR.js debug UI — always hidden */
-    .a-enter-vr, .rs-base { display: none !important; }
   </style>
 </head>
 <body>
@@ -505,10 +461,7 @@
     <h1>AR Scene Viewer</h1>
     <p>Siegen-Feuersbach Community Project</p>
   </div>
-
-  <div class="picker-grid" id="model-grid">
-    <!-- Cards injected by JS -->
-  </div>
+  <div class="picker-grid" id="model-grid"></div>
 </div>
 
 
@@ -520,14 +473,14 @@
   <h2>Camera Access Required</h2>
   <p>
     This app needs camera access to show augmented reality.
-    Please allow camera permissions in your browser settings and reload the page.
+    Please allow camera permissions and reload the page.
   </p>
-  <p style="font-size:13px; color:#555; margin-top:-8px;">
-    On iOS: Settings → Safari → Camera → Allow<br>
-    On Android: tap the lock icon in the address bar
+  <p style="font-size:13px;color:#555;margin-top:-8px;">
+    iOS: Settings → Safari → Camera → Allow<br>
+    Android: tap the lock icon in the address bar
   </p>
   <button onclick="location.reload()">Try Again</button>
-  <button onclick="showPicker()" style="background:transparent; color:var(--text-muted); border:1px solid #333; margin-top:4px; border-radius:14px; padding:12px 24px; font-size:14px; font-weight:600; cursor:pointer; min-height:44px;">← Back to Picker</button>
+  <button onclick="showPicker()" style="background:transparent;color:var(--text-muted);border:1px solid #333;margin-top:4px;border-radius:14px;padding:12px 24px;font-size:14px;font-weight:600;cursor:pointer;min-height:44px;">← Back</button>
 </div>
 
 
@@ -536,51 +489,52 @@
 ════════════════════════════════════════════════════════ -->
 <div id="ar-screen" class="screen hidden">
 
+  <!-- Camera feed — rendered directly via getUserMedia -->
+  <video id="camera-bg" autoplay playsinline muted></video>
+
   <!-- Loading overlay -->
   <div id="ar-loading">
     <div class="spinner"></div>
-    <span>Starting camera…</span>
+    <span id="loading-text">Starting camera…</span>
   </div>
 
-  <!-- A-Frame scene -->
+  <!-- A-Frame scene (no AR.js — transparent canvas over video) -->
   <a-scene
     id="ar-scene"
     embedded
-    arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best"
     renderer="antialias: true; alpha: true; logarithmicDepthBuffer: true;"
     background="color: transparent; transparent: true"
     vr-mode-ui="enabled: false"
     loading-screen="enabled: false"
   >
-    <a-assets id="a-assets" timeout="15000">
-      <a-asset-item id="asset-chair"         src="models/chair.glb"></a-asset-item>
-      <a-asset-item id="asset-office_chair"  src="models/office_chair.glb"></a-asset-item>
-      <a-asset-item id="asset-sofa"          src="models/sofa.glb"></a-asset-item>
-      <a-asset-item id="asset-table"         src="models/table.glb"></a-asset-item>
+    <a-assets id="a-assets" timeout="20000">
+      <a-asset-item id="asset-chair"        src="models/chair.glb"></a-asset-item>
+      <a-asset-item id="asset-office_chair" src="models/office_chair.glb"></a-asset-item>
+      <a-asset-item id="asset-sofa"         src="models/sofa.glb"></a-asset-item>
+      <a-asset-item id="asset-table"        src="models/table.glb"></a-asset-item>
     </a-assets>
 
-    <!-- Camera — AR.js adds device-orientation controls automatically -->
-    <a-entity id="ar-camera" camera></a-entity>
+    <!--
+      look-controls with magicWindowTrackingEnabled uses the device
+      gyroscope on iOS/Android so the scene responds to phone rotation.
+      touchEnabled: false stops drag-to-look (tap is for placement).
+    -->
+    <a-entity
+      id="ar-camera"
+      camera
+      look-controls="enabled: true; magicWindowTrackingEnabled: true; touchEnabled: false; mouseEnabled: false"
+      wasd-controls="enabled: false"
+      position="0 1.6 0"
+    ></a-entity>
 
-    <!-- Ground plane for hit-testing (invisible) -->
-    <a-plane
-      id="ground-plane"
-      rotation="-90 0 0"
-      width="200" height="200"
-      material="visible: false; side: double"
-      class="ground"
-    ></a-plane>
-
-    <!-- Ambient + directional light -->
-    <a-light type="ambient" color="#ffffff" intensity="0.8"></a-light>
-    <a-light type="directional" position="1 3 2" intensity="0.7"></a-light>
-
+    <a-light type="ambient"     color="#ffffff" intensity="0.9"></a-light>
+    <a-light type="directional" color="#ffffff" intensity="0.6" position="1 3 2"></a-light>
   </a-scene>
 
-  <!-- Toolbar -->
+  <!-- Toolbar (z-index above a-scene) -->
   <div id="ar-toolbar">
     <div class="toolbar-left">
-      <button class="toolbar-btn" id="back-btn" onclick="showPicker()">← Back</button>
+      <button class="toolbar-btn" onclick="showPicker()">← Back</button>
     </div>
 
     <button id="model-pill" onclick="showPicker()">
@@ -590,13 +544,11 @@
 
     <div class="toolbar-right">
       <span class="object-count" id="object-count">0 objects</span>
-      <button class="toolbar-btn danger" id="clear-btn" onclick="clearAllObjects()" title="Clear all">🗑</button>
+      <button class="toolbar-btn danger" onclick="clearAllObjects()">🗑</button>
     </div>
   </div>
 
-  <!-- Tap hint -->
   <div id="tap-hint">👆 Tap anywhere to place</div>
-
 </div>
 
 
@@ -606,7 +558,6 @@
 <div id="transform-sheet">
   <div class="sheet-handle"></div>
 
-  <!-- Size -->
   <div class="sheet-section">
     <div class="sheet-label">Size</div>
     <div class="slider-row">
@@ -616,21 +567,19 @@
     </div>
   </div>
 
-  <!-- Rotate -->
   <div class="sheet-section">
     <div class="sheet-label">Rotate</div>
     <div class="rotate-row">
-      <button class="rotate-btn" onclick="rotateSelected(-45)" title="Rotate left">↺</button>
-      <button class="rotate-btn" onclick="rotateSelected(45)" title="Rotate right">↻</button>
+      <button class="rotate-btn" onclick="rotateSelected(-45)">↺</button>
+      <button class="rotate-btn" onclick="rotateSelected(45)">↻</button>
     </div>
   </div>
 
-  <!-- Actions -->
   <div class="sheet-section">
     <div class="sheet-label">Actions</div>
     <div class="action-row">
       <button class="action-btn duplicate" onclick="duplicateSelected()">📋 Duplicate</button>
-      <button class="action-btn delete" onclick="deleteSelected()">🗑 Delete</button>
+      <button class="action-btn delete"    onclick="deleteSelected()">🗑 Delete</button>
     </div>
   </div>
 
@@ -639,38 +588,35 @@
 
 
 <!-- ═══════════════════════════════════════════════════════
-     SCRIPTS — CDN A-Frame + AR.js
+     A-Frame only — no AR.js needed
 ════════════════════════════════════════════════════════ -->
 <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-<script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
 
 <script>
 // ─────────────────────────────────────────────────────────
 //  DATA
 // ─────────────────────────────────────────────────────────
 const MODELS = [
-  { id: 'chair',        emoji: '🪑', name: 'Chair',         desc: 'Classic seating element' },
-  { id: 'office_chair', emoji: '💺', name: 'Office Chair',  desc: 'Ergonomic swivel seating' },
-  { id: 'sofa',         emoji: '🛋️', name: 'Sofa',          desc: 'Comfortable lounge seating' },
-  { id: 'table',        emoji: '🪵', name: 'Table',         desc: 'Shared outdoor surface' },
+  { id: 'chair',        emoji: '🪑', name: 'Chair',        desc: 'Classic seating element' },
+  { id: 'office_chair', emoji: '💺', name: 'Office Chair', desc: 'Ergonomic swivel seating' },
+  { id: 'sofa',         emoji: '🛋️', name: 'Sofa',         desc: 'Comfortable lounge seating' },
+  { id: 'table',        emoji: '🪵', name: 'Table',        desc: 'Shared outdoor surface' },
 ];
 
 // ─────────────────────────────────────────────────────────
 //  STATE
 // ─────────────────────────────────────────────────────────
 let selectedModelId  = 'chair';
-let placedObjects    = [];   // [{ id, modelId, el }]
+let placedObjects    = [];
 let selectedObjectId = null;
 let objectCounter    = 0;
-let sceneReady       = false;
-let arTapEnabled     = false;
+let cameraStream     = null;
+let arReady          = false;
 
 // ─────────────────────────────────────────────────────────
 //  INIT
 // ─────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  buildPickerGrid();
-});
+document.addEventListener('DOMContentLoaded', buildPickerGrid);
 
 function buildPickerGrid() {
   const grid = document.getElementById('model-grid');
@@ -684,30 +630,26 @@ function buildPickerGrid() {
       <div class="card-desc">${m.desc}</div>
       <button class="card-btn" data-id="${m.id}">Place in AR</button>
     `;
-    // Ripple effect
     card.addEventListener('pointerdown', (e) => {
       const r = document.createElement('span');
       r.className = 'ripple';
       const rect = card.getBoundingClientRect();
       const size = Math.max(rect.width, rect.height) * 1.5;
-      r.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX - rect.left - size/2}px;top:${e.clientY - rect.top - size/2}px`;
+      r.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX-rect.left-size/2}px;top:${e.clientY-rect.top-size/2}px`;
       card.appendChild(r);
       r.addEventListener('animationend', () => r.remove());
     });
-    card.querySelector('.card-btn').addEventListener('click', () => {
-      selectModelAndLaunchAR(m.id);
-    });
+    card.querySelector('.card-btn').addEventListener('click', () => selectModelAndLaunchAR(m.id));
     grid.appendChild(card);
   });
 }
 
 // ─────────────────────────────────────────────────────────
-//  SCREEN TRANSITIONS
+//  SCREENS
 // ─────────────────────────────────────────────────────────
 function showScreen(id) {
   ['picker-screen', 'permission-error', 'ar-screen'].forEach(sid => {
-    const el = document.getElementById(sid);
-    if (el) el.classList.toggle('hidden', sid !== id);
+    document.getElementById(sid).classList.toggle('hidden', sid !== id);
   });
 }
 
@@ -724,98 +666,113 @@ async function selectModelAndLaunchAR(modelId) {
   updatePill();
   showScreen('ar-screen');
   document.getElementById('ar-loading').classList.remove('hidden');
+  document.getElementById('loading-text').textContent = 'Starting camera…';
 
+  // 1. Start rear camera
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: false
+    if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
+
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        width:  { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+      audio: false,
     });
-    // Stop probe stream; AR.js will start its own
-    stream.getTracks().forEach(t => t.stop());
-    initARScene();
+
+    const video = document.getElementById('camera-bg');
+    video.srcObject = cameraStream;
+    // iOS needs play() called explicitly after srcObject is set
+    await video.play().catch(err => console.warn('video.play():', err));
+
   } catch (err) {
-    console.warn('Camera permission denied:', err);
+    console.error('Camera error:', err);
     showScreen('permission-error');
-  }
-}
-
-function initARScene() {
-  const scene = document.getElementById('ar-scene');
-
-  if (sceneReady) {
-    // Scene already running
-    document.getElementById('ar-loading').classList.add('hidden');
-    arTapEnabled = true;
     return;
   }
 
-  scene.addEventListener('loaded', () => {
-    sceneReady = true;
-    document.getElementById('ar-loading').classList.add('hidden');
-    arTapEnabled = true;
-    showTapHint();
-  });
-
-  // Fallback: hide loader after 4s regardless
-  setTimeout(() => {
-    document.getElementById('ar-loading').classList.add('hidden');
-    arTapEnabled = true;
-    sceneReady = true;
-    showTapHint();
-  }, 4000);
-
-  // Tap to place on AR canvas
-  const canvas = scene.canvas || scene.querySelector('canvas');
-  if (canvas) attachTapListener(canvas);
-
-  // Also listen on scene itself for canvas-not-ready case
-  scene.addEventListener('click', handleARTap);
-}
-
-function attachTapListener(canvas) {
-  canvas.addEventListener('touchend', handleARTap, { passive: false });
-  canvas.addEventListener('click', handleARTap);
-}
-
-// ─────────────────────────────────────────────────────────
-//  AR TAP — PLACE MODEL
-// ─────────────────────────────────────────────────────────
-function handleARTap(e) {
-  if (!arTapEnabled) return;
-
-  // If tapping an already-placed object, select it
-  if (e.target && e.target.closest) {
-    const entityEl = e.target.closest('[data-object-id]');
-    if (entityEl) {
-      selectObject(entityEl.dataset.objectId);
-      return;
+  // 2. Request device-orientation permission (iOS 13+ only)
+  document.getElementById('loading-text').textContent = 'Requesting motion access…';
+  if (typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try {
+      const perm = await DeviceOrientationEvent.requestPermission();
+      if (perm !== 'granted') {
+        console.warn('DeviceOrientation denied — gyroscope look-around disabled');
+      }
+    } catch (e) {
+      console.warn('DeviceOrientationEvent.requestPermission failed:', e);
     }
   }
 
-  // Don't place if bottom sheet is open and tap is in sheet area
-  const sheet = document.getElementById('transform-sheet');
-  if (sheet.classList.contains('open') && e.target && sheet.contains(e.target)) return;
+  // 3. Wait for A-Frame scene to be ready
+  document.getElementById('loading-text').textContent = 'Loading scene…';
+  const scene = document.getElementById('ar-scene');
 
-  // Don't place if toolbar was tapped
-  const toolbar = document.getElementById('ar-toolbar');
-  if (toolbar && toolbar.contains(e.target)) return;
+  if (scene.hasLoaded) {
+    onSceneReady();
+  } else {
+    scene.addEventListener('loaded', onSceneReady, { once: true });
+    // Fallback: proceed after 3s even if event didn't fire
+    setTimeout(onSceneReady, 3000);
+  }
+}
+
+function onSceneReady() {
+  if (arReady) return;
+  arReady = true;
+  document.getElementById('ar-loading').classList.add('hidden');
+  showTapHint();
+}
+
+// ─────────────────────────────────────────────────────────
+//  TAP TO PLACE
+// ─────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  // Attach tap listener to ar-screen (covers whole view)
+  const arScreen = document.getElementById('ar-screen');
+  arScreen.addEventListener('click', onARTap);
+  arScreen.addEventListener('touchend', onARTap, { passive: false });
+});
+
+function onARTap(e) {
+  if (!arReady) return;
+
+  // Ignore taps on toolbar, sheet, loading overlay
+  const ignore = ['ar-toolbar', 'transform-sheet', 'ar-loading', 'tap-hint'];
+  for (const id of ignore) {
+    const el = document.getElementById(id);
+    if (el && el.contains(e.target)) return;
+  }
+
+  // If tapping a placed object → select it
+  if (e.target && e.target.closest) {
+    const entity = e.target.closest('[data-object-id]');
+    if (entity) {
+      selectObject(entity.dataset.objectId);
+      return;
+    }
+  }
 
   placeSelectedModel();
   hideTapHint();
 }
 
+// ─────────────────────────────────────────────────────────
+//  PLACE
+// ─────────────────────────────────────────────────────────
 function placeSelectedModel(offsetX = 0, offsetZ = 0) {
-  const scene   = document.getElementById('ar-scene');
-  const camera  = scene.querySelector('[camera]');
-  if (!camera) return;
+  const scene  = document.getElementById('ar-scene');
+  const camera = document.getElementById('ar-camera');
+  if (!scene || !camera) return null;
 
   objectCounter++;
   const uid = `obj-${objectCounter}`;
-  const modelData = MODELS.find(m => m.id === selectedModelId);
 
-  // Position 2 units in front of camera at y=0
-  const camRotation = camera.getAttribute('rotation') || { x: 0, y: 0, z: 0 };
-  const yaw = (camRotation.y || 0) * (Math.PI / 180);
+  // Place 2 units in front of where the camera is currently pointing
+  const rot = camera.getAttribute('rotation') || { x: 0, y: 0, z: 0 };
+  const yaw = (rot.y || 0) * (Math.PI / 180);
   const dist = 2;
   const posX = parseFloat((Math.sin(yaw) * -dist + offsetX).toFixed(3));
   const posZ = parseFloat((Math.cos(yaw) * -dist + offsetZ).toFixed(3));
@@ -832,17 +789,12 @@ function placeSelectedModel(offsetX = 0, offsetZ = 0) {
   entity.setAttribute('data-scale', '1.0');
   entity.setAttribute('data-rotation-y', '0');
 
-  // Tap to select
   entity.addEventListener('click', () => selectObject(uid));
-  entity.addEventListener('touchend', (ev) => {
-    ev.stopPropagation();
-    selectObject(uid);
-  });
+  entity.addEventListener('touchend', (ev) => { ev.stopPropagation(); selectObject(uid); });
 
   scene.appendChild(entity);
   placedObjects.push({ id: uid, modelId: selectedModelId, el: entity });
   updateObjectCount();
-
   return uid;
 }
 
@@ -850,22 +802,19 @@ function placeSelectedModel(offsetX = 0, offsetZ = 0) {
 //  SELECTION
 // ─────────────────────────────────────────────────────────
 function selectObject(uid) {
-  // Deselect previous
   if (selectedObjectId && selectedObjectId !== uid) {
     const prev = document.getElementById(selectedObjectId);
-    if (prev) prev.classList.remove('selected-entity');
+    if (prev) prev.style.filter = '';
   }
 
   selectedObjectId = uid;
   const entity = document.getElementById(uid);
   if (!entity) return;
 
-  // Pulse highlight
-  entity.classList.remove('selected-entity');
-  void entity.offsetWidth; // reflow
-  entity.classList.add('selected-entity');
+  // Brief pulse via style animation
+  entity.setAttribute('animation__pulse',
+    'property: scale; dir: alternate; dur: 150; easing: easeInOutSine; loop: 2; to: 1.08 1.08 1.08');
 
-  // Sync slider to object's current scale
   const currentScale = parseFloat(entity.getAttribute('data-scale') || '1.0');
   document.getElementById('scale-slider').value = currentScale;
   document.getElementById('scale-display').textContent = currentScale.toFixed(1) + 'x';
@@ -874,16 +823,12 @@ function selectObject(uid) {
 }
 
 function deselectObject() {
-  if (selectedObjectId) {
-    const entity = document.getElementById(selectedObjectId);
-    if (entity) entity.classList.remove('selected-entity');
-  }
   selectedObjectId = null;
   closeSheet();
 }
 
 // ─────────────────────────────────────────────────────────
-//  TRANSFORM CONTROLS
+//  TRANSFORMS
 // ─────────────────────────────────────────────────────────
 function onScaleChange(val) {
   const v = parseFloat(val);
@@ -910,23 +855,18 @@ function duplicateSelected() {
   const entity = document.getElementById(selectedObjectId);
   if (!entity) return;
 
-  const origPos  = entity.getAttribute('position');
-  const origModelId = entity.getAttribute('data-model-id') || selectedModelId;
-  const origScale   = parseFloat(entity.getAttribute('data-scale') || '1.0');
-  const origRotY    = parseFloat(entity.getAttribute('data-rotation-y') || '0');
+  const origModel = entity.getAttribute('data-model-id') || selectedModelId;
+  const origScale = parseFloat(entity.getAttribute('data-scale') || '1.0');
+  const origRotY  = parseFloat(entity.getAttribute('data-rotation-y') || '0');
 
-  // Temporarily switch selected model to clone's type
-  const prevModel = selectedModelId;
-  selectedModelId = origModelId;
-
+  const prev = selectedModelId;
+  selectedModelId = origModel;
   const uid = placeSelectedModel(0.6, 0.6);
-  selectedModelId = prevModel;
+  selectedModelId = prev;
 
   if (!uid) return;
   const clone = document.getElementById(uid);
   if (!clone) return;
-
-  // Copy scale and rotation
   clone.setAttribute('scale', `${origScale} ${origScale} ${origScale}`);
   clone.setAttribute('data-scale', origScale);
   clone.setAttribute('rotation', `0 ${origRotY} 0`);
@@ -939,7 +879,7 @@ function duplicateSelected() {
 function deleteSelected() {
   if (!selectedObjectId) return;
   const entity = document.getElementById(selectedObjectId);
-  if (entity) entity.parentNode && entity.parentNode.removeChild(entity);
+  if (entity && entity.parentNode) entity.parentNode.removeChild(entity);
   placedObjects = placedObjects.filter(o => o.id !== selectedObjectId);
   selectedObjectId = null;
   closeSheet();
@@ -947,9 +887,7 @@ function deleteSelected() {
 }
 
 function clearAllObjects() {
-  placedObjects.forEach(o => {
-    if (o.el && o.el.parentNode) o.el.parentNode.removeChild(o.el);
-  });
+  placedObjects.forEach(o => { if (o.el && o.el.parentNode) o.el.parentNode.removeChild(o.el); });
   placedObjects = [];
   selectedObjectId = null;
   closeSheet();
@@ -960,13 +898,8 @@ function clearAllObjects() {
 // ─────────────────────────────────────────────────────────
 //  SHEET
 // ─────────────────────────────────────────────────────────
-function openSheet() {
-  document.getElementById('transform-sheet').classList.add('open');
-}
-
-function closeSheet() {
-  document.getElementById('transform-sheet').classList.remove('open');
-}
+function openSheet()  { document.getElementById('transform-sheet').classList.add('open'); }
+function closeSheet() { document.getElementById('transform-sheet').classList.remove('open'); }
 
 // ─────────────────────────────────────────────────────────
 //  UI HELPERS
@@ -986,9 +919,8 @@ function updateObjectCount() {
 function showTapHint() {
   const hint = document.getElementById('tap-hint');
   hint.classList.remove('hidden');
-  // Auto-hide after 5s
-  clearTimeout(showTapHint._timer);
-  showTapHint._timer = setTimeout(hideTapHint, 5000);
+  clearTimeout(showTapHint._t);
+  showTapHint._t = setTimeout(hideTapHint, 5000);
 }
 
 function hideTapHint() {
@@ -996,38 +928,19 @@ function hideTapHint() {
 }
 
 // ─────────────────────────────────────────────────────────
-//  PREVENT SCROLL/ZOOM ON AR CANVAS
+//  PREVENT SCROLL / PINCH ZOOM ON AR VIEW
 // ─────────────────────────────────────────────────────────
 document.addEventListener('touchmove', (e) => {
-  if (document.getElementById('ar-screen') && !document.getElementById('ar-screen').classList.contains('hidden')) {
-    // Allow scroll inside bottom sheet
+  const arScreen = document.getElementById('ar-screen');
+  if (!arScreen.classList.contains('hidden')) {
     if (document.getElementById('transform-sheet').contains(e.target)) return;
     e.preventDefault();
   }
 }, { passive: false });
 
-document.addEventListener('gesturestart', (e) => e.preventDefault());
-document.addEventListener('gesturechange', (e) => e.preventDefault());
-document.addEventListener('gestureend', (e) => e.preventDefault());
-
-// ─────────────────────────────────────────────────────────
-//  A-FRAME: WAIT FOR SCENE CANVAS, THEN ATTACH TAP
-// ─────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  const scene = document.getElementById('ar-scene');
-
-  // Canvas may not exist until AR.js initialises it
-  const observer = new MutationObserver(() => {
-    const canvas = scene.querySelector('canvas');
-    if (canvas && !canvas._tapAttached) {
-      canvas._tapAttached = true;
-      canvas.addEventListener('touchend', handleARTap, { passive: false });
-      canvas.addEventListener('click', handleARTap);
-      observer.disconnect();
-    }
-  });
-  observer.observe(scene, { childList: true, subtree: true });
-});
+document.addEventListener('gesturestart',  e => e.preventDefault());
+document.addEventListener('gesturechange', e => e.preventDefault());
+document.addEventListener('gestureend',    e => e.preventDefault());
 </script>
 </body>
 </html>
