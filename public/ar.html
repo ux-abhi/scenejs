@@ -474,6 +474,99 @@
       opacity: 1;
       transform: translateX(-50%) translateY(0);
     }
+
+    /* ─── CROSSHAIR ─────────────────────────────────────── */
+    #crosshair {
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 28px; height: 28px;
+      border: 2px solid rgba(255,255,255,0.85);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 998;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.3);
+      display: none;
+    }
+    #crosshair.visible { display: block; }
+    #crosshair::before, #crosshair::after {
+      content: '';
+      position: absolute;
+      background: rgba(255,255,255,0.85);
+    }
+    #crosshair::before { width: 1px; height: 10px; left: 50%; top: -8px; transform: translateX(-50%); }
+    #crosshair::after  { width: 10px; height: 1px; top: 50%;  left: -8px; transform: translateY(-50%); }
+
+    /* ─── SCAN OVERLAY ──────────────────────────────────── */
+    #scan-overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 900;
+      pointer-events: none;
+      transition: opacity 0.4s ease;
+    }
+    #scan-overlay.hidden { opacity: 0; pointer-events: none; }
+
+    .scan-inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 28px;
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-radius: 24px;
+      border: 1px solid rgba(255,255,255,0.1);
+      min-width: 220px;
+    }
+
+    .scan-ring {
+      width: 100px; height: 100px;
+      position: relative;
+    }
+
+    .scan-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+
+    .scan-track {
+      fill: none;
+      stroke: rgba(58,134,255,0.2);
+      stroke-width: 5;
+    }
+
+    .scan-arc {
+      fill: none;
+      stroke: #3a86ff;
+      stroke-width: 5;
+      stroke-linecap: round;
+      stroke-dasharray: 263.9; /* 2π × 42 */
+      stroke-dashoffset: 263.9; /* starts empty */
+      transition: stroke 0.3s;
+    }
+
+    #scan-overlay.found .scan-arc { stroke: #22c55e; }
+
+    .scan-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+      margin: 0;
+      text-align: center;
+    }
+
+    .scan-hint {
+      font-size: 13px;
+      color: rgba(255,255,255,0.6);
+      margin: 0;
+      text-align: center;
+    }
+
+    @keyframes scan-spin {
+      to { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
@@ -547,7 +640,7 @@
     <a-entity
       id="ar-camera"
       camera
-      look-controls="enabled: true; magicWindowTrackingEnabled: true; touchEnabled: false; mouseEnabled: false"
+      look-controls="enabled: false"
       wasd-controls="enabled: false"
       position="0 1.6 0"
     ></a-entity>
@@ -585,6 +678,23 @@
   </div>
 
   <div id="tap-hint">👆 Tap anywhere to place</div>
+
+  <!-- Crosshair — always at screen centre once floor is found -->
+  <div id="crosshair"></div>
+
+  <!-- Scanning floor overlay -->
+  <div id="scan-overlay" class="hidden">
+    <div class="scan-inner">
+      <div class="scan-ring">
+        <svg viewBox="0 0 100 100">
+          <circle class="scan-track" cx="50" cy="50" r="42"/>
+          <circle id="scan-arc" class="scan-arc" cx="50" cy="50" r="42"/>
+        </svg>
+      </div>
+      <p class="scan-title">Scanning floor…</p>
+      <p class="scan-hint">Point your camera at the ground</p>
+    </div>
+  </div>
 </div>
 
 
@@ -642,12 +752,70 @@ const MODELS = [
 // ─────────────────────────────────────────────────────────
 //  STATE
 // ─────────────────────────────────────────────────────────
-let selectedModelId  = 'chair';
-let placedObjects    = [];
-let selectedObjectId = null;
-let objectCounter    = 0;
-let cameraStream     = null;
-let arReady          = false;
+let selectedModelId   = 'chair';
+let placedObjects     = [];
+let selectedObjectId  = null;
+let objectCounter     = 0;
+let cameraStream      = null;
+let arReady           = false;
+let scanningFloor     = false;
+let floorScanStart    = null;
+let latestOrientation = { alpha: 0, beta: 90, gamma: 0 };
+
+// ─────────────────────────────────────────────────────────
+//  DEVICE ORIENTATION → CAMERA ROTATION
+//  Bypasses A-Frame look-controls (broken on iOS Safari).
+//  Drives the camera directly from raw DeviceOrientationEvent.
+// ─────────────────────────────────────────────────────────
+const SCAN_MS = 1800;
+const CIRC    = 2 * Math.PI * 42; // SVG arc circumference for r=42
+
+window.addEventListener('deviceorientation', (e) => {
+  if (e.beta === null) return;
+
+  latestOrientation = { alpha: e.alpha || 0, beta: e.beta, gamma: e.gamma || 0 };
+
+  // Update A-Frame camera rotation directly
+  const camera = document.getElementById('ar-camera');
+  if (camera && arReady) {
+    camera.setAttribute('rotation', {
+      x:  90 - e.beta,     // 0 = looking forward, positive = looking down
+      y: -e.alpha,         // compass heading → yaw
+      z: -e.gamma,         // roll
+    });
+  }
+
+  if (scanningFloor) checkFloorScan(e.beta);
+}, { passive: true });
+
+function checkFloorScan(beta) {
+  const lookingDown = beta < 68; // tilted >22° from vertical toward floor
+  if (lookingDown) {
+    if (!floorScanStart) floorScanStart = Date.now();
+    const p = Math.min(1, (Date.now() - floorScanStart) / SCAN_MS);
+    setScanProgress(p);
+    if (p >= 1) floorFound();
+  } else {
+    floorScanStart = null;
+    setScanProgress(0);
+  }
+}
+
+function setScanProgress(p) {
+  const arc = document.getElementById('scan-arc');
+  if (arc) arc.style.strokeDashoffset = CIRC * (1 - p);
+}
+
+function floorFound() {
+  scanningFloor = false;
+  const overlay = document.getElementById('scan-overlay');
+  overlay.classList.add('found');
+  document.querySelector('.scan-title').textContent = '✅ Floor found!';
+  document.querySelector('.scan-hint').textContent  = 'Tap anywhere to place';
+  document.getElementById('crosshair').classList.add('visible');
+  setTimeout(() => overlay.classList.add('hidden'), 1200);
+  showTapHint();
+}
 
 // ─────────────────────────────────────────────────────────
 //  INIT
@@ -693,6 +861,12 @@ function showPicker() {
   deselectObject();
   stopReticleLoop();
   arReady = false;
+  scanningFloor = false;
+  floorScanStart = null;
+  setScanProgress(0);
+  document.getElementById('scan-overlay').classList.add('hidden');
+  document.getElementById('scan-overlay').classList.remove('found');
+  document.getElementById('crosshair').classList.remove('visible');
   showScreen('picker-screen');
 }
 
@@ -761,7 +935,13 @@ function onSceneReady() {
   if (arReady) return;
   arReady = true;
   document.getElementById('ar-loading').classList.add('hidden');
-  showTapHint();
+  // Show scanning overlay — hides after floor is detected
+  const overlay = document.getElementById('scan-overlay');
+  overlay.classList.remove('hidden', 'found');
+  document.querySelector('.scan-title').textContent = 'Scanning floor…';
+  document.querySelector('.scan-hint').textContent  = 'Point your camera at the ground';
+  setScanProgress(0);
+  scanningFloor = true;
   startReticleLoop();
 }
 
