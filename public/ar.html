@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>AR Scene Viewer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0f0f;
+      --card: #1a1a1a;
+      --border: #2a2a2a;
+      --blue: #3a86ff;
+      --text: #ffffff;
+      --text-muted: #888888;
+      --sheet-bg: #141414;
+      --radius: 14px;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior: none;
+      overflow: hidden;
+    }
+
+    /* ─── SCREEN MANAGEMENT ─────────────────────────────── */
+    .screen { position: fixed; inset: 0; transition: opacity 0.3s ease, transform 0.3s ease; }
+    .screen.hidden { opacity: 0; pointer-events: none; transform: translateY(12px); }
+
+    /* ─── STATE 1: MODEL PICKER ─────────────────────────── */
+    #picker-screen {
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .picker-header {
+      flex-shrink: 0;
+      padding: 52px 20px 20px;
+      background: linear-gradient(180deg, #0f0f0f 80%, transparent);
+      position: relative;
+      z-index: 2;
+    }
+
+    .picker-header h1 {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1.1;
+    }
+
+    .picker-header p {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .picker-grid {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 16px calc(env(safe-area-inset-bottom) + 24px);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .model-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 12px 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      transition: transform 0.15s, border-color 0.15s, background 0.15s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .model-card:active { transform: scale(0.96); background: #222; }
+
+    .model-card .ripple {
+      position: absolute;
+      border-radius: 50%;
+      background: rgba(58,134,255,0.18);
+      transform: scale(0);
+      animation: ripple-anim 0.5s linear;
+      pointer-events: none;
+    }
+
+    @keyframes ripple-anim {
+      to { transform: scale(4); opacity: 0; }
+    }
+
+    .card-emoji {
+      font-size: 36px;
+      line-height: 1;
+    }
+
+    .card-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      text-align: center;
+    }
+
+    .card-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: center;
+      line-height: 1.3;
+    }
+
+    .card-btn {
+      margin-top: 4px;
+      width: 100%;
+      background: var(--blue);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 0;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      min-height: 44px;
+      transition: background 0.15s;
+    }
+
+    .card-btn:active { background: #2266dd; }
+
+    /* ─── PERMISSION ERROR SCREEN ───────────────────────── */
+    #permission-error {
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 24px;
+      gap: 16px;
+      text-align: center;
+    }
+
+    #permission-error .err-icon { font-size: 48px; }
+    #permission-error h2 { font-size: 20px; font-weight: 700; }
+    #permission-error p { font-size: 14px; color: var(--text-muted); line-height: 1.6; max-width: 300px; }
+    #permission-error button {
+      margin-top: 8px;
+      background: var(--blue);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      padding: 14px 32px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      min-height: 48px;
+    }
+
+    /* ─── STATE 2 & 3: AR VIEW ───────────────────────────── */
+    #ar-screen {
+      background: #000;
+    }
+
+    /* A-Frame fills the screen */
+    #ar-screen a-scene {
+      position: absolute;
+      inset: 0;
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    /* ─── TOP TOOLBAR ───────────────────────────────────── */
+    #ar-toolbar {
+      position: fixed;
+      top: env(safe-area-inset-top, 0px);
+      left: 0; right: 0;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      z-index: 1000;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .toolbar-left, .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toolbar-btn {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: #fff;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      min-height: 44px;
+      min-width: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: background 0.15s;
+    }
+
+    .toolbar-btn:active { background: rgba(255,255,255,0.2); }
+
+    .toolbar-btn.danger { background: rgba(220,53,69,0.2); border-color: rgba(220,53,69,0.3); }
+    .toolbar-btn.danger:active { background: rgba(220,53,69,0.35); }
+
+    .object-count {
+      font-size: 11px;
+      background: rgba(58,134,255,0.25);
+      border: 1px solid rgba(58,134,255,0.4);
+      color: var(--blue);
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    #model-pill {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 999px;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #fff;
+      cursor: pointer;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s;
+    }
+
+    #model-pill:active { background: rgba(255,255,255,0.18); }
+
+    /* ─── TAP HINT ──────────────────────────────────────── */
+    #tap-hint {
+      position: fixed;
+      bottom: calc(env(safe-area-inset-bottom) + 96px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.6);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 10px 20px;
+      border-radius: 999px;
+      pointer-events: none;
+      z-index: 999;
+      animation: hint-pulse 2.5s ease-in-out infinite;
+      white-space: nowrap;
+    }
+
+    @keyframes hint-pulse {
+      0%, 100% { opacity: 0.7; transform: translateX(-50%) scale(1); }
+      50% { opacity: 1; transform: translateX(-50%) scale(1.04); }
+    }
+
+    #tap-hint.hidden { display: none; }
+
+    /* ─── LOADING OVERLAY ───────────────────────────────── */
+    #ar-loading {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      z-index: 2000;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    #ar-loading.hidden { display: none; }
+
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid rgba(255,255,255,0.15);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── STATE 3: BOTTOM SHEET ─────────────────────────── */
+    #transform-sheet {
+      position: fixed;
+      left: 0; right: 0;
+      bottom: 0;
+      background: var(--sheet-bg);
+      border-top-left-radius: 20px;
+      border-top-right-radius: 20px;
+      border-top: 1px solid var(--border);
+      padding: 0 20px calc(env(safe-area-inset-bottom) + 20px);
+      z-index: 1001;
+      transform: translateY(100%);
+      transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+      max-height: 75vh;
+      overflow-y: auto;
+    }
+
+    #transform-sheet.open { transform: translateY(0); }
+
+    .sheet-handle {
+      width: 36px; height: 4px;
+      background: #333;
+      border-radius: 99px;
+      margin: 12px auto 20px;
+    }
+
+    .sheet-section {
+      margin-bottom: 20px;
+    }
+
+    .sheet-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    /* Resize slider */
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .slider-row input[type=range] {
+      -webkit-appearance: none;
+      flex: 1;
+      height: 4px;
+      background: #2a2a2a;
+      border-radius: 99px;
+      outline: none;
+    }
+
+    .slider-row input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: var(--blue);
+      box-shadow: 0 2px 8px rgba(58,134,255,0.4);
+      cursor: pointer;
+    }
+
+    .slider-row input[type=range]::-moz-range-thumb {
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: var(--blue);
+      border: none;
+      cursor: pointer;
+    }
+
+    .scale-label {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--blue);
+      min-width: 40px;
+      text-align: right;
+    }
+
+    /* Rotate buttons */
+    .rotate-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .rotate-btn {
+      flex: 1;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      color: #fff;
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 20px;
+      cursor: pointer;
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+    }
+
+    .rotate-btn:active { background: rgba(255,255,255,0.14); }
+
+    /* Action buttons */
+    .action-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .action-btn {
+      flex: 1;
+      border-radius: 12px;
+      padding: 13px 10px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      min-height: 48px;
+      border: none;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    .action-btn:active { transform: scale(0.97); }
+
+    .action-btn.duplicate {
+      background: rgba(58,134,255,0.15);
+      border: 1px solid rgba(58,134,255,0.3);
+      color: var(--blue);
+    }
+
+    .action-btn.delete {
+      background: rgba(220,53,69,0.15);
+      border: 1px solid rgba(220,53,69,0.3);
+      color: #ff4d5e;
+    }
+
+    .sheet-done-btn {
+      width: 100%;
+      margin-top: 6px;
+      background: #222;
+      border: 1px solid #333;
+      color: #fff;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      min-height: 50px;
+      transition: background 0.15s;
+    }
+
+    .sheet-done-btn:active { background: #2a2a2a; }
+
+    /* ─── OBJECT HIGHLIGHT ──────────────────────────────── */
+    @keyframes highlight-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.75; }
+    }
+
+    .selected-entity {
+      animation: highlight-pulse 0.8s ease-in-out 2;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════
+     STATE 1 — MODEL PICKER
+════════════════════════════════════════════════════════ -->
+<div id="picker-screen" class="screen">
+  <div class="picker-header">
+    <h1>AR Scene Viewer</h1>
+    <p>Siegen-Feuersbach Community Project</p>
+  </div>
+
+  <div class="picker-grid" id="model-grid">
+    <!-- Cards injected by JS -->
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     PERMISSION ERROR
+════════════════════════════════════════════════════════ -->
+<div id="permission-error" class="screen hidden">
+  <div class="err-icon">📷</div>
+  <h2>Camera Access Required</h2>
+  <p>
+    This app needs camera access to show augmented reality.
+    Please allow camera permissions in your browser settings and reload the page.
+  </p>
+  <p style="font-size:13px; color:#555; margin-top:-8px;">
+    On iOS: Settings → Safari → Camera → Allow<br>
+    On Android: tap the lock icon in the address bar
+  </p>
+  <button onclick="location.reload()">Try Again</button>
+  <button onclick="showPicker()" style="background:transparent; color:var(--text-muted); border:1px solid #333; margin-top:4px; border-radius:14px; padding:12px 24px; font-size:14px; font-weight:600; cursor:pointer; min-height:44px;">← Back to Picker</button>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     STATE 2 / 3 — AR VIEW
+════════════════════════════════════════════════════════ -->
+<div id="ar-screen" class="screen hidden">
+
+  <!-- Loading overlay -->
+  <div id="ar-loading">
+    <div class="spinner"></div>
+    <span>Starting camera…</span>
+  </div>
+
+  <!-- A-Frame scene -->
+  <a-scene
+    id="ar-scene"
+    embedded
+    arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3; trackingMethod: best"
+    renderer="antialias: true; alpha: true; logarithmicDepthBuffer: true;"
+    vr-mode-ui="enabled: false"
+    loading-screen="enabled: false"
+    gesture-detector
+  >
+    <a-assets id="a-assets" timeout="15000">
+      <a-asset-item id="asset-chair"         src="models/chair.glb"></a-asset-item>
+      <a-asset-item id="asset-office_chair"  src="models/office_chair.glb"></a-asset-item>
+      <a-asset-item id="asset-sofa"          src="models/sofa.glb"></a-asset-item>
+      <a-asset-item id="asset-table"         src="models/table.glb"></a-asset-item>
+    </a-assets>
+
+    <!-- Camera -->
+    <a-entity camera look-controls="enabled: false" arjs-device-orientation-controls="smoothingFactor: 0.1">
+      <a-cursor
+        id="ar-cursor"
+        fuse="false"
+        raycaster="objects: .placeable"
+        geometry="primitive: ring; radiusInner: 0.01; radiusOuter: 0.015"
+        material="color: white; shader: flat"
+        position="0 0 -0.5"
+      ></a-cursor>
+    </a-entity>
+
+    <!-- Ground plane for hit-testing (invisible) -->
+    <a-plane
+      id="ground-plane"
+      rotation="-90 0 0"
+      width="200" height="200"
+      material="visible: false; side: double"
+      class="ground"
+    ></a-plane>
+
+    <!-- Ambient + directional light -->
+    <a-light type="ambient" color="#ffffff" intensity="0.8"></a-light>
+    <a-light type="directional" position="1 3 2" intensity="0.7"></a-light>
+
+  </a-scene>
+
+  <!-- Toolbar -->
+  <div id="ar-toolbar">
+    <div class="toolbar-left">
+      <button class="toolbar-btn" id="back-btn" onclick="showPicker()">← Back</button>
+    </div>
+
+    <button id="model-pill" onclick="showPicker()">
+      <span id="pill-emoji">🪑</span>
+      <span id="pill-name">Chair</span>
+    </button>
+
+    <div class="toolbar-right">
+      <span class="object-count" id="object-count">0 objects</span>
+      <button class="toolbar-btn danger" id="clear-btn" onclick="clearAllObjects()" title="Clear all">🗑</button>
+    </div>
+  </div>
+
+  <!-- Tap hint -->
+  <div id="tap-hint">👆 Tap anywhere to place</div>
+
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     STATE 3 — TRANSFORM BOTTOM SHEET
+════════════════════════════════════════════════════════ -->
+<div id="transform-sheet">
+  <div class="sheet-handle"></div>
+
+  <!-- Size -->
+  <div class="sheet-section">
+    <div class="sheet-label">Size</div>
+    <div class="slider-row">
+      <input type="range" id="scale-slider" min="0.2" max="3.0" step="0.1" value="1.0"
+             oninput="onScaleChange(this.value)" />
+      <span class="scale-label" id="scale-display">1.0x</span>
+    </div>
+  </div>
+
+  <!-- Rotate -->
+  <div class="sheet-section">
+    <div class="sheet-label">Rotate</div>
+    <div class="rotate-row">
+      <button class="rotate-btn" onclick="rotateSelected(-45)" title="Rotate left">↺</button>
+      <button class="rotate-btn" onclick="rotateSelected(45)" title="Rotate right">↻</button>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="sheet-section">
+    <div class="sheet-label">Actions</div>
+    <div class="action-row">
+      <button class="action-btn duplicate" onclick="duplicateSelected()">📋 Duplicate</button>
+      <button class="action-btn delete" onclick="deleteSelected()">🗑 Delete</button>
+    </div>
+  </div>
+
+  <button class="sheet-done-btn" onclick="deselectObject()">Done</button>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     SCRIPTS — CDN A-Frame + AR.js
+════════════════════════════════════════════════════════ -->
+<script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+<script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+
+<script>
+// ─────────────────────────────────────────────────────────
+//  DATA
+// ─────────────────────────────────────────────────────────
+const MODELS = [
+  { id: 'chair',        emoji: '🪑', name: 'Chair',         desc: 'Classic seating element' },
+  { id: 'office_chair', emoji: '💺', name: 'Office Chair',  desc: 'Ergonomic swivel seating' },
+  { id: 'sofa',         emoji: '🛋️', name: 'Sofa',          desc: 'Comfortable lounge seating' },
+  { id: 'table',        emoji: '🪵', name: 'Table',         desc: 'Shared outdoor surface' },
+];
+
+// ─────────────────────────────────────────────────────────
+//  STATE
+// ─────────────────────────────────────────────────────────
+let selectedModelId  = 'chair';
+let placedObjects    = [];   // [{ id, modelId, el }]
+let selectedObjectId = null;
+let objectCounter    = 0;
+let sceneReady       = false;
+let arTapEnabled     = false;
+
+// ─────────────────────────────────────────────────────────
+//  INIT
+// ─────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  buildPickerGrid();
+});
+
+function buildPickerGrid() {
+  const grid = document.getElementById('model-grid');
+  grid.innerHTML = '';
+  MODELS.forEach(m => {
+    const card = document.createElement('div');
+    card.className = 'model-card';
+    card.innerHTML = `
+      <div class="card-emoji">${m.emoji}</div>
+      <div class="card-name">${m.name}</div>
+      <div class="card-desc">${m.desc}</div>
+      <button class="card-btn" data-id="${m.id}">Place in AR</button>
+    `;
+    // Ripple effect
+    card.addEventListener('pointerdown', (e) => {
+      const r = document.createElement('span');
+      r.className = 'ripple';
+      const rect = card.getBoundingClientRect();
+      const size = Math.max(rect.width, rect.height) * 1.5;
+      r.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX - rect.left - size/2}px;top:${e.clientY - rect.top - size/2}px`;
+      card.appendChild(r);
+      r.addEventListener('animationend', () => r.remove());
+    });
+    card.querySelector('.card-btn').addEventListener('click', () => {
+      selectModelAndLaunchAR(m.id);
+    });
+    grid.appendChild(card);
+  });
+}
+
+// ─────────────────────────────────────────────────────────
+//  SCREEN TRANSITIONS
+// ─────────────────────────────────────────────────────────
+function showScreen(id) {
+  ['picker-screen', 'permission-error', 'ar-screen'].forEach(sid => {
+    const el = document.getElementById(sid);
+    if (el) el.classList.toggle('hidden', sid !== id);
+  });
+}
+
+function showPicker() {
+  deselectObject();
+  showScreen('picker-screen');
+}
+
+// ─────────────────────────────────────────────────────────
+//  LAUNCH AR
+// ─────────────────────────────────────────────────────────
+async function selectModelAndLaunchAR(modelId) {
+  selectedModelId = modelId;
+  updatePill();
+  showScreen('ar-screen');
+  document.getElementById('ar-loading').classList.remove('hidden');
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    // Stop probe stream; AR.js will start its own
+    stream.getTracks().forEach(t => t.stop());
+    initARScene();
+  } catch (err) {
+    console.warn('Camera permission denied:', err);
+    showScreen('permission-error');
+  }
+}
+
+function initARScene() {
+  const scene = document.getElementById('ar-scene');
+
+  if (sceneReady) {
+    // Scene already running
+    document.getElementById('ar-loading').classList.add('hidden');
+    arTapEnabled = true;
+    return;
+  }
+
+  scene.addEventListener('loaded', () => {
+    sceneReady = true;
+    document.getElementById('ar-loading').classList.add('hidden');
+    arTapEnabled = true;
+    showTapHint();
+  });
+
+  // Fallback: hide loader after 4s regardless
+  setTimeout(() => {
+    document.getElementById('ar-loading').classList.add('hidden');
+    arTapEnabled = true;
+    sceneReady = true;
+    showTapHint();
+  }, 4000);
+
+  // Tap to place on AR canvas
+  const canvas = scene.canvas || scene.querySelector('canvas');
+  if (canvas) attachTapListener(canvas);
+
+  // Also listen on scene itself for canvas-not-ready case
+  scene.addEventListener('click', handleARTap);
+}
+
+function attachTapListener(canvas) {
+  canvas.addEventListener('touchend', handleARTap, { passive: false });
+  canvas.addEventListener('click', handleARTap);
+}
+
+// ─────────────────────────────────────────────────────────
+//  AR TAP — PLACE MODEL
+// ─────────────────────────────────────────────────────────
+function handleARTap(e) {
+  if (!arTapEnabled) return;
+
+  // If tapping an already-placed object, select it
+  if (e.target && e.target.closest) {
+    const entityEl = e.target.closest('[data-object-id]');
+    if (entityEl) {
+      selectObject(entityEl.dataset.objectId);
+      return;
+    }
+  }
+
+  // Don't place if bottom sheet is open and tap is in sheet area
+  const sheet = document.getElementById('transform-sheet');
+  if (sheet.classList.contains('open') && e.target && sheet.contains(e.target)) return;
+
+  // Don't place if toolbar was tapped
+  const toolbar = document.getElementById('ar-toolbar');
+  if (toolbar && toolbar.contains(e.target)) return;
+
+  placeSelectedModel();
+  hideTapHint();
+}
+
+function placeSelectedModel(offsetX = 0, offsetZ = 0) {
+  const scene   = document.getElementById('ar-scene');
+  const camera  = scene.querySelector('[camera]');
+  if (!camera) return;
+
+  objectCounter++;
+  const uid = `obj-${objectCounter}`;
+  const modelData = MODELS.find(m => m.id === selectedModelId);
+
+  // Position 2 units in front of camera at y=0
+  const camRotation = camera.getAttribute('rotation') || { x: 0, y: 0, z: 0 };
+  const yaw = (camRotation.y || 0) * (Math.PI / 180);
+  const dist = 2;
+  const posX = parseFloat((Math.sin(yaw) * -dist + offsetX).toFixed(3));
+  const posZ = parseFloat((Math.cos(yaw) * -dist + offsetZ).toFixed(3));
+
+  const entity = document.createElement('a-entity');
+  entity.setAttribute('id', uid);
+  entity.setAttribute('data-object-id', uid);
+  entity.setAttribute('class', 'placeable');
+  entity.setAttribute('gltf-model', `#asset-${selectedModelId}`);
+  entity.setAttribute('position', `${posX} 0 ${posZ}`);
+  entity.setAttribute('scale', '1 1 1');
+  entity.setAttribute('rotation', '0 0 0');
+  entity.setAttribute('data-model-id', selectedModelId);
+  entity.setAttribute('data-scale', '1.0');
+  entity.setAttribute('data-rotation-y', '0');
+
+  // Tap to select
+  entity.addEventListener('click', () => selectObject(uid));
+  entity.addEventListener('touchend', (ev) => {
+    ev.stopPropagation();
+    selectObject(uid);
+  });
+
+  scene.appendChild(entity);
+  placedObjects.push({ id: uid, modelId: selectedModelId, el: entity });
+  updateObjectCount();
+
+  return uid;
+}
+
+// ─────────────────────────────────────────────────────────
+//  SELECTION
+// ─────────────────────────────────────────────────────────
+function selectObject(uid) {
+  // Deselect previous
+  if (selectedObjectId && selectedObjectId !== uid) {
+    const prev = document.getElementById(selectedObjectId);
+    if (prev) prev.classList.remove('selected-entity');
+  }
+
+  selectedObjectId = uid;
+  const entity = document.getElementById(uid);
+  if (!entity) return;
+
+  // Pulse highlight
+  entity.classList.remove('selected-entity');
+  void entity.offsetWidth; // reflow
+  entity.classList.add('selected-entity');
+
+  // Sync slider to object's current scale
+  const currentScale = parseFloat(entity.getAttribute('data-scale') || '1.0');
+  document.getElementById('scale-slider').value = currentScale;
+  document.getElementById('scale-display').textContent = currentScale.toFixed(1) + 'x';
+
+  openSheet();
+}
+
+function deselectObject() {
+  if (selectedObjectId) {
+    const entity = document.getElementById(selectedObjectId);
+    if (entity) entity.classList.remove('selected-entity');
+  }
+  selectedObjectId = null;
+  closeSheet();
+}
+
+// ─────────────────────────────────────────────────────────
+//  TRANSFORM CONTROLS
+// ─────────────────────────────────────────────────────────
+function onScaleChange(val) {
+  const v = parseFloat(val);
+  document.getElementById('scale-display').textContent = v.toFixed(1) + 'x';
+  if (!selectedObjectId) return;
+  const entity = document.getElementById(selectedObjectId);
+  if (!entity) return;
+  entity.setAttribute('scale', `${v} ${v} ${v}`);
+  entity.setAttribute('data-scale', v);
+}
+
+function rotateSelected(degrees) {
+  if (!selectedObjectId) return;
+  const entity = document.getElementById(selectedObjectId);
+  if (!entity) return;
+  const current = parseFloat(entity.getAttribute('data-rotation-y') || '0');
+  const next = (current + degrees + 360) % 360;
+  entity.setAttribute('rotation', `0 ${next} 0`);
+  entity.setAttribute('data-rotation-y', next);
+}
+
+function duplicateSelected() {
+  if (!selectedObjectId) return;
+  const entity = document.getElementById(selectedObjectId);
+  if (!entity) return;
+
+  const origPos  = entity.getAttribute('position');
+  const origModelId = entity.getAttribute('data-model-id') || selectedModelId;
+  const origScale   = parseFloat(entity.getAttribute('data-scale') || '1.0');
+  const origRotY    = parseFloat(entity.getAttribute('data-rotation-y') || '0');
+
+  // Temporarily switch selected model to clone's type
+  const prevModel = selectedModelId;
+  selectedModelId = origModelId;
+
+  const uid = placeSelectedModel(0.6, 0.6);
+  selectedModelId = prevModel;
+
+  if (!uid) return;
+  const clone = document.getElementById(uid);
+  if (!clone) return;
+
+  // Copy scale and rotation
+  clone.setAttribute('scale', `${origScale} ${origScale} ${origScale}`);
+  clone.setAttribute('data-scale', origScale);
+  clone.setAttribute('rotation', `0 ${origRotY} 0`);
+  clone.setAttribute('data-rotation-y', origRotY);
+
+  deselectObject();
+  selectObject(uid);
+}
+
+function deleteSelected() {
+  if (!selectedObjectId) return;
+  const entity = document.getElementById(selectedObjectId);
+  if (entity) entity.parentNode && entity.parentNode.removeChild(entity);
+  placedObjects = placedObjects.filter(o => o.id !== selectedObjectId);
+  selectedObjectId = null;
+  closeSheet();
+  updateObjectCount();
+}
+
+function clearAllObjects() {
+  placedObjects.forEach(o => {
+    if (o.el && o.el.parentNode) o.el.parentNode.removeChild(o.el);
+  });
+  placedObjects = [];
+  selectedObjectId = null;
+  closeSheet();
+  updateObjectCount();
+  showTapHint();
+}
+
+// ─────────────────────────────────────────────────────────
+//  SHEET
+// ─────────────────────────────────────────────────────────
+function openSheet() {
+  document.getElementById('transform-sheet').classList.add('open');
+}
+
+function closeSheet() {
+  document.getElementById('transform-sheet').classList.remove('open');
+}
+
+// ─────────────────────────────────────────────────────────
+//  UI HELPERS
+// ─────────────────────────────────────────────────────────
+function updatePill() {
+  const m = MODELS.find(x => x.id === selectedModelId);
+  if (!m) return;
+  document.getElementById('pill-emoji').textContent = m.emoji;
+  document.getElementById('pill-name').textContent  = m.name;
+}
+
+function updateObjectCount() {
+  const n = placedObjects.length;
+  document.getElementById('object-count').textContent = `${n} object${n !== 1 ? 's' : ''}`;
+}
+
+function showTapHint() {
+  const hint = document.getElementById('tap-hint');
+  hint.classList.remove('hidden');
+  // Auto-hide after 5s
+  clearTimeout(showTapHint._timer);
+  showTapHint._timer = setTimeout(hideTapHint, 5000);
+}
+
+function hideTapHint() {
+  document.getElementById('tap-hint').classList.add('hidden');
+}
+
+// ─────────────────────────────────────────────────────────
+//  PREVENT SCROLL/ZOOM ON AR CANVAS
+// ─────────────────────────────────────────────────────────
+document.addEventListener('touchmove', (e) => {
+  if (document.getElementById('ar-screen') && !document.getElementById('ar-screen').classList.contains('hidden')) {
+    // Allow scroll inside bottom sheet
+    if (document.getElementById('transform-sheet').contains(e.target)) return;
+    e.preventDefault();
+  }
+}, { passive: false });
+
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('gesturechange', (e) => e.preventDefault());
+document.addEventListener('gestureend', (e) => e.preventDefault());
+
+// ─────────────────────────────────────────────────────────
+//  A-FRAME: WAIT FOR SCENE CANVAS, THEN ATTACH TAP
+// ─────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  const scene = document.getElementById('ar-scene');
+
+  // Canvas may not exist until AR.js initialises it
+  const observer = new MutationObserver(() => {
+    const canvas = scene.querySelector('canvas');
+    if (canvas && !canvas._tapAttached) {
+      canvas._tapAttached = true;
+      canvas.addEventListener('touchend', handleARTap, { passive: false });
+      canvas.addEventListener('click', handleARTap);
+      observer.disconnect();
+    }
+  });
+  observer.observe(scene, { childList: true, subtree: true });
+});
+</script>
+</body>
+</html>
