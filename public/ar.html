@@ -2,22 +2,24 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="mobile-web-app-capable" content="yes" />
   <title>AR Scene Viewer</title>
+
+  <!-- model-viewer: handles ARKit (iOS) and ARCore (Android) natively -->
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
+
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #0f0f0f;
-      --card: #1a1a1a;
-      --border: #2a2a2a;
-      --blue: #3a86ff;
-      --text: #ffffff;
+      --bg:         #0f0f0f;
+      --card:       #1a1a1a;
+      --border:     #2a2a2a;
+      --blue:       #3a86ff;
+      --text:       #ffffff;
       --text-muted: #888888;
-      --sheet-bg: #141414;
-      --radius: 14px;
+      --radius:     14px;
     }
 
     html, body {
@@ -30,537 +32,171 @@
       overflow: hidden;
     }
 
-    /* ─── SCREEN MANAGEMENT ─────────────────────────────── */
-    .screen { position: fixed; inset: 0; transition: opacity 0.3s ease, transform 0.3s ease; }
-    .screen.hidden { opacity: 0; pointer-events: none; transform: translateY(12px); }
+    .screen {
+      position: fixed;
+      inset: 0;
+      transition: opacity 0.25s ease;
+    }
+    .hidden { opacity: 0; pointer-events: none; }
 
-    /* ─── STATE 1: MODEL PICKER ─────────────────────────── */
+    /* ─── PICKER ───────────────────────────────────────── */
     #picker-screen {
-      background: var(--bg);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: max(env(safe-area-inset-bottom), 24px);
     }
 
     .picker-header {
-      flex-shrink: 0;
-      padding: 52px 20px 20px;
-      background: linear-gradient(180deg, #0f0f0f 80%, transparent);
-      position: relative;
-      z-index: 2;
+      padding: max(env(safe-area-inset-top), 48px) 24px 24px;
+      text-align: center;
     }
-
     .picker-header h1 {
-      font-size: 24px;
+      font-size: clamp(22px, 6vw, 30px);
       font-weight: 800;
-      color: var(--text);
-      line-height: 1.1;
+      margin-bottom: 6px;
     }
-
-    .picker-header p {
-      font-size: 13px;
-      color: var(--text-muted);
-      margin-top: 4px;
-    }
+    .picker-header p { font-size: 14px; color: var(--text-muted); }
 
     .picker-grid {
-      flex: 1;
-      overflow-y: auto;
-      padding: 8px 16px calc(env(safe-area-inset-bottom) + 24px);
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 12px;
-      -webkit-overflow-scrolling: touch;
+      padding: 0 16px 32px;
     }
 
     .model-card {
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 16px 12px 14px;
+      padding: 20px 16px;
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 8px;
       cursor: pointer;
-      transition: transform 0.15s, border-color 0.15s, background 0.15s;
       position: relative;
       overflow: hidden;
+      transition: border-color 0.15s;
     }
+    .model-card:active { background: #222; }
 
-    .model-card:active { transform: scale(0.96); background: #222; }
-
-    .model-card .ripple {
-      position: absolute;
-      border-radius: 50%;
-      background: rgba(58,134,255,0.18);
-      transform: scale(0);
-      animation: ripple-anim 0.5s linear;
-      pointer-events: none;
-    }
-
-    @keyframes ripple-anim {
-      to { transform: scale(4); opacity: 0; }
-    }
-
-    .card-emoji { font-size: 36px; line-height: 1; }
-    .card-name { font-size: 13px; font-weight: 700; color: var(--text); text-align: center; }
-    .card-desc { font-size: 11px; color: var(--text-muted); text-align: center; line-height: 1.3; }
+    .card-emoji { font-size: 40px; line-height: 1; }
+    .card-name  { font-size: 15px; font-weight: 700; }
+    .card-desc  { font-size: 12px; color: var(--text-muted); text-align: center; line-height: 1.4; }
 
     .card-btn {
-      margin-top: 4px;
-      width: 100%;
+      margin-top: 8px;
       background: var(--blue);
       color: #fff;
       border: none;
-      border-radius: 10px;
-      padding: 10px 0;
+      border-radius: 999px;
+      padding: 8px 18px;
       font-size: 13px;
       font-weight: 700;
       cursor: pointer;
-      min-height: 44px;
-      transition: background 0.15s;
+      min-height: 36px;
     }
 
-    .card-btn:active { background: #2266dd; }
+    /* ripple */
+    .ripple {
+      position: absolute;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.14);
+      transform: scale(0);
+      animation: ripple 0.5s ease-out forwards;
+      pointer-events: none;
+    }
+    @keyframes ripple { to { transform: scale(1); opacity: 0; } }
 
-    /* ─── PERMISSION ERROR ──────────────────────────────── */
-    #permission-error {
-      background: var(--bg);
+    /* ─── AR SCREEN ────────────────────────────────────── */
+    #ar-screen {
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 32px 24px;
-      gap: 16px;
-      text-align: center;
+      background: #111;
     }
 
-    #permission-error .err-icon { font-size: 48px; }
-    #permission-error h2 { font-size: 20px; font-weight: 700; }
-    #permission-error p { font-size: 14px; color: var(--text-muted); line-height: 1.6; max-width: 300px; }
-    #permission-error button {
-      background: var(--blue);
-      color: #fff;
-      border: none;
-      border-radius: var(--radius);
-      padding: 14px 32px;
-      font-size: 15px;
-      font-weight: 700;
-      cursor: pointer;
-      min-height: 48px;
-    }
-
-    /* ─── STATE 2 & 3: AR VIEW ───────────────────────────── */
-    #ar-screen { background: #000; }
-
-    /* Camera feed video — fills screen behind everything */
-    #camera-bg {
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      object-fit: cover;
-      z-index: 0;
-    }
-
-    /* A-Frame canvas — transparent, sits above video */
-    #ar-scene {
-      position: fixed !important;
-      top: 0 !important; left: 0 !important;
-      width: 100% !important; height: 100% !important;
-      z-index: 1;
-    }
-
-    #ar-scene canvas {
-      position: fixed !important;
-      top: 0 !important; left: 0 !important;
-      width: 100% !important; height: 100% !important;
-      background: transparent !important;
-    }
-
-    /* Hide A-Frame's built-in UI chrome */
-    .a-enter-vr, .a-enter-ar, .rs-base { display: none !important; }
-
-    /* ─── TOP TOOLBAR ───────────────────────────────────── */
     #ar-toolbar {
-      position: fixed;
-      top: env(safe-area-inset-top, 0px);
-      left: 0; right: 0;
-      height: 56px;
+      flex-shrink: 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 12px;
-      background: rgba(0,0,0,0.55);
+      padding: max(env(safe-area-inset-top), 12px) 16px 12px;
+      background: rgba(0,0,0,0.7);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
-      z-index: 1000;
-      border-bottom: 1px solid rgba(255,255,255,0.07);
-    }
-
-    .toolbar-left, .toolbar-right {
-      display: flex;
-      align-items: center;
-      gap: 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      z-index: 10;
     }
 
     .toolbar-btn {
-      background: rgba(255,255,255,0.1);
-      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.08);
       color: #fff;
-      border-radius: 10px;
-      padding: 8px 12px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      min-height: 44px;
-      min-width: 44px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      transition: background 0.15s;
-    }
-
-    .toolbar-btn:active { background: rgba(255,255,255,0.2); }
-    .toolbar-btn.danger { background: rgba(220,53,69,0.2); border-color: rgba(220,53,69,0.3); }
-    .toolbar-btn.danger:active { background: rgba(220,53,69,0.35); }
-
-    .object-count {
-      font-size: 11px;
-      background: rgba(58,134,255,0.25);
-      border: 1px solid rgba(58,134,255,0.4);
-      color: var(--blue);
-      border-radius: 999px;
-      padding: 3px 8px;
-      font-weight: 700;
-      white-space: nowrap;
-    }
-
-    #model-pill {
-      background: rgba(255,255,255,0.1);
-      border: 1px solid rgba(255,255,255,0.15);
-      border-radius: 999px;
-      padding: 6px 14px;
-      font-size: 13px;
-      font-weight: 600;
-      color: #fff;
-      cursor: pointer;
-      min-height: 44px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      transition: background 0.15s;
-    }
-
-    #model-pill:active { background: rgba(255,255,255,0.18); }
-
-    /* ─── TAP HINT ──────────────────────────────────────── */
-    #tap-hint {
-      position: fixed;
-      bottom: calc(env(safe-area-inset-bottom) + 96px);
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.65);
-      color: #fff;
-      font-size: 14px;
-      font-weight: 600;
-      padding: 10px 20px;
-      border-radius: 999px;
-      pointer-events: none;
-      z-index: 999;
-      animation: hint-pulse 2.5s ease-in-out infinite;
-      white-space: nowrap;
-    }
-
-    @keyframes hint-pulse {
-      0%, 100% { opacity: 0.7; transform: translateX(-50%) scale(1); }
-      50% { opacity: 1; transform: translateX(-50%) scale(1.04); }
-    }
-
-    #tap-hint.hidden { display: none; }
-
-    /* ─── LOADING OVERLAY ───────────────────────────────── */
-    #ar-loading {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.88);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 16px;
-      z-index: 2000;
-      color: #fff;
-      font-size: 15px;
-      font-weight: 600;
-    }
-
-    #ar-loading.hidden { display: none; }
-
-    .spinner {
-      width: 40px; height: 40px;
-      border: 3px solid rgba(255,255,255,0.15);
-      border-top-color: var(--blue);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* ─── STATE 3: BOTTOM SHEET ─────────────────────────── */
-    #transform-sheet {
-      position: fixed;
-      left: 0; right: 0; bottom: 0;
-      background: var(--sheet-bg);
-      border-top-left-radius: 20px;
-      border-top-right-radius: 20px;
-      border-top: 1px solid var(--border);
-      padding: 0 20px calc(env(safe-area-inset-bottom) + 20px);
-      z-index: 1001;
-      transform: translateY(100%);
-      transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
-      max-height: 75vh;
-      overflow-y: auto;
-    }
-
-    #transform-sheet.open { transform: translateY(0); }
-
-    .sheet-handle {
-      width: 36px; height: 4px;
-      background: #333;
-      border-radius: 99px;
-      margin: 12px auto 20px;
-    }
-
-    .sheet-section { margin-bottom: 20px; }
-
-    .sheet-label {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--text-muted);
-      margin-bottom: 10px;
-    }
-
-    .slider-row { display: flex; align-items: center; gap: 12px; }
-
-    .slider-row input[type=range] {
-      -webkit-appearance: none;
-      flex: 1;
-      height: 4px;
-      background: #2a2a2a;
-      border-radius: 99px;
-      outline: none;
-    }
-
-    .slider-row input[type=range]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 24px; height: 24px;
-      border-radius: 50%;
-      background: var(--blue);
-      box-shadow: 0 2px 8px rgba(58,134,255,0.4);
-      cursor: pointer;
-    }
-
-    .slider-row input[type=range]::-moz-range-thumb {
-      width: 24px; height: 24px;
-      border-radius: 50%;
-      background: var(--blue);
       border: none;
-      cursor: pointer;
-    }
-
-    .scale-label {
+      border-radius: 999px;
+      padding: 8px 18px;
       font-size: 14px;
-      font-weight: 700;
-      color: var(--blue);
-      min-width: 40px;
-      text-align: right;
-    }
-
-    .rotate-row { display: flex; gap: 10px; }
-
-    .rotate-btn {
-      flex: 1;
-      background: rgba(255,255,255,0.06);
-      border: 1px solid var(--border);
-      color: #fff;
-      border-radius: 12px;
-      padding: 12px;
-      font-size: 20px;
+      font-weight: 600;
       cursor: pointer;
-      min-height: 48px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background 0.15s;
+      min-height: 36px;
     }
 
-    .rotate-btn:active { background: rgba(255,255,255,0.14); }
+    #model-title { font-size: 15px; font-weight: 700; }
 
-    .action-row { display: flex; gap: 10px; }
-
-    .action-btn {
+    /* model-viewer fills remaining height */
+    model-viewer {
       flex: 1;
-      border-radius: 12px;
-      padding: 13px 10px;
-      font-size: 14px;
-      font-weight: 700;
-      cursor: pointer;
-      min-height: 48px;
-      border: none;
-      transition: background 0.15s, transform 0.1s;
-    }
-
-    .action-btn:active { transform: scale(0.97); }
-
-    .action-btn.duplicate {
-      background: rgba(58,134,255,0.15);
-      border: 1px solid rgba(58,134,255,0.3);
-      color: var(--blue);
-    }
-
-    .action-btn.delete {
-      background: rgba(220,53,69,0.15);
-      border: 1px solid rgba(220,53,69,0.3);
-      color: #ff4d5e;
-    }
-
-    .sheet-done-btn {
       width: 100%;
-      margin-top: 6px;
-      background: #222;
-      border: 1px solid #333;
+      background-color: #111;
+      --poster-color: #111;
+    }
+
+    /* ─── AR BUTTON (inside model-viewer slot) ─────────── */
+    #ar-btn {
+      background: var(--blue);
       color: #fff;
-      border-radius: 12px;
-      padding: 14px;
-      font-size: 15px;
+      border: none;
+      border-radius: 14px;
+      padding: 16px 36px;
+      font-size: 17px;
       font-weight: 700;
       cursor: pointer;
-      min-height: 50px;
-      transition: background 0.15s;
+      box-shadow: 0 4px 24px rgba(58,134,255,0.45);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 56px;
+      white-space: nowrap;
     }
 
-    .sheet-done-btn:active { background: #2a2a2a; }
-
-    @keyframes highlight-pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.7; }
-    }
+    /* model-viewer positions slot="ar-button" at bottom-centre automatically */
 
     /* ─── TOAST ─────────────────────────────────────────── */
-    #ar-toast {
+    #toast {
       position: fixed;
-      bottom: calc(env(safe-area-inset-bottom) + 110px);
+      bottom: max(env(safe-area-inset-bottom), 24px);
       left: 50%;
-      transform: translateX(-50%) translateY(20px);
-      background: rgba(220, 53, 69, 0.92);
+      transform: translateX(-50%) translateY(6px);
+      background: rgba(20,20,20,0.92);
       color: #fff;
-      font-size: 13px;
-      font-weight: 600;
-      padding: 9px 18px;
+      padding: 10px 20px;
       border-radius: 999px;
-      pointer-events: none;
-      z-index: 1100;
+      font-size: 14px;
+      font-weight: 500;
       opacity: 0;
-      transition: opacity 0.25s ease, transform 0.25s ease;
+      transition: opacity 0.2s, transform 0.2s;
+      pointer-events: none;
+      z-index: 2000;
       white-space: nowrap;
-      max-width: 88vw;
-      text-align: center;
-    }
-    #ar-toast.show {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
-
-    /* ─── CROSSHAIR ─────────────────────────────────────── */
-    #crosshair {
-      position: fixed;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      width: 28px; height: 28px;
-      border: 2px solid rgba(255,255,255,0.85);
-      border-radius: 50%;
-      pointer-events: none;
-      z-index: 998;
-      box-shadow: 0 0 0 1px rgba(0,0,0,0.3);
-      display: none;
-    }
-    #crosshair.visible { display: block; }
-    #crosshair::before, #crosshair::after {
-      content: '';
-      position: absolute;
-      background: rgba(255,255,255,0.85);
-    }
-    #crosshair::before { width: 1px; height: 10px; left: 50%; top: -8px; transform: translateX(-50%); }
-    #crosshair::after  { width: 10px; height: 1px; top: 50%;  left: -8px; transform: translateY(-50%); }
-
-    /* ─── SCAN OVERLAY ──────────────────────────────────── */
-    #scan-overlay {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 900;
-      pointer-events: none;
-      transition: opacity 0.4s ease;
-    }
-    #scan-overlay.hidden { opacity: 0; pointer-events: none; }
-
-    .scan-inner {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 16px;
-      padding: 28px;
-      background: rgba(0,0,0,0.55);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      border-radius: 24px;
       border: 1px solid rgba(255,255,255,0.1);
-      min-width: 220px;
     }
-
-    .scan-dots { display: flex; gap: 8px; align-items: center; height: 40px; }
-    .scan-dots .dot {
-      width: 10px; height: 10px;
-      background: var(--blue);
-      border-radius: 50%;
-      animation: dot-bounce 1.2s ease-in-out infinite;
-    }
-    .scan-dots .dot:nth-child(2) { animation-delay: 0.2s; }
-    .scan-dots .dot:nth-child(3) { animation-delay: 0.4s; }
-    @keyframes dot-bounce {
-      0%, 100% { transform: translateY(0); opacity: 0.4; }
-      50%       { transform: translateY(-8px); opacity: 1; }
-    }
-    #scan-overlay.found .dot { background: #22c55e; animation: none; transform: none; }
-
-    .scan-title {
-      font-size: 16px;
-      font-weight: 700;
-      color: #fff;
-      margin: 0;
-      text-align: center;
-    }
-
-    .scan-hint {
-      font-size: 13px;
-      color: rgba(255,255,255,0.6);
-      margin: 0;
-      text-align: center;
-    }
-
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   </style>
 </head>
 <body>
 
-<!-- ═══════════════════════════════════════════════════════
-     STATE 1 — MODEL PICKER
-════════════════════════════════════════════════════════ -->
+<!-- ═══════════════════════════════
+     PICKER
+════════════════════════════════ -->
 <div id="picker-screen" class="screen">
   <div class="picker-header">
     <h1>AR Scene Viewer</h1>
@@ -570,159 +206,39 @@
 </div>
 
 
-<!-- ═══════════════════════════════════════════════════════
-     PERMISSION ERROR
-════════════════════════════════════════════════════════ -->
-<div id="permission-error" class="screen hidden">
-  <div class="err-icon">📷</div>
-  <h2>Camera Access Required</h2>
-  <p>
-    This app needs camera access to show augmented reality.
-    Please allow camera permissions and reload the page.
-  </p>
-  <p style="font-size:13px;color:#555;margin-top:-8px;">
-    iOS: Settings → Safari → Camera → Allow<br>
-    Android: tap the lock icon in the address bar
-  </p>
-  <button onclick="location.reload()">Try Again</button>
-  <button onclick="showPicker()" style="background:transparent;color:var(--text-muted);border:1px solid #333;margin-top:4px;border-radius:14px;padding:12px 24px;font-size:14px;font-weight:600;cursor:pointer;min-height:44px;">← Back</button>
-</div>
-
-
-<!-- ═══════════════════════════════════════════════════════
-     STATE 2 / 3 — AR VIEW
-════════════════════════════════════════════════════════ -->
+<!-- ═══════════════════════════════
+     AR VIEW
+════════════════════════════════ -->
 <div id="ar-screen" class="screen hidden">
 
-  <!-- Camera feed — rendered directly via getUserMedia -->
-  <video id="camera-bg" autoplay playsinline muted></video>
-
-  <!-- Loading overlay -->
-  <div id="ar-loading">
-    <div class="spinner"></div>
-    <span id="loading-text">Starting camera…</span>
-  </div>
-
-  <!-- A-Frame scene (no AR.js — transparent canvas over video) -->
-  <a-scene
-    id="ar-scene"
-    embedded
-    renderer="antialias: true; alpha: true; logarithmicDepthBuffer: true;"
-    background="color: transparent; transparent: true"
-    vr-mode-ui="enabled: false"
-    loading-screen="enabled: false"
-  >
-    <a-assets timeout="1"></a-assets>
-
-    <!--
-      look-controls with magicWindowTrackingEnabled uses the device
-      gyroscope on iOS/Android so the scene responds to phone rotation.
-      touchEnabled: false stops drag-to-look (tap is for placement).
-    -->
-    <a-entity
-      id="ar-camera"
-      camera
-      look-controls="enabled: false"
-      wasd-controls="enabled: false"
-      position="0 1.6 0"
-    ></a-entity>
-
-    <a-light type="ambient"     color="#ffffff" intensity="0.6"></a-light>
-    <a-light type="directional" color="#ffffff" intensity="0.5" position="1 3 2"></a-light>
-    <a-light type="hemisphere"  color="#ffffff" groundColor="#bbbbbb" intensity="1.2"></a-light>
-
-    <!-- Placement reticle — position updated every rAF by startReticleLoop() -->
-    <a-ring
-      id="reticle"
-      radius-inner="0.08"
-      radius-outer="0.15"
-      rotation="-90 0 0"
-      material="color: #3a86ff; opacity: 0.85; shader: flat; side: double"
-      visible="false"
-    ></a-ring>
-  </a-scene>
-
-  <!-- Toolbar (z-index above a-scene) -->
   <div id="ar-toolbar">
-    <div class="toolbar-left">
-      <button class="toolbar-btn" onclick="showPicker()">← Back</button>
-    </div>
+    <button class="toolbar-btn" onclick="showPicker()">← Back</button>
+    <span id="model-title">Chair</span>
+    <div style="width:80px"></div>
+  </div>
 
-    <button id="model-pill" onclick="showPicker()">
-      <span id="pill-emoji">🪑</span>
-      <span id="pill-name">Chair</span>
+  <model-viewer
+    id="model-view"
+    ar
+    ar-modes="webxr scene-viewer quick-look"
+    camera-controls
+    auto-rotate
+    shadow-intensity="1"
+    alt="3D model"
+  >
+    <!-- This button appears only when AR is available on the device -->
+    <button slot="ar-button" id="ar-btn">
+      <span>📷</span> Place in Your Room
     </button>
+  </model-viewer>
 
-    <div class="toolbar-right">
-      <span class="object-count" id="object-count">0 objects</span>
-      <button class="toolbar-btn danger" onclick="clearAllObjects()">🗑</button>
-    </div>
-  </div>
-
-  <div id="tap-hint">👆 Tap anywhere to place</div>
-
-  <!-- Crosshair — always at screen centre once floor is found -->
-  <div id="crosshair"></div>
-
-  <!-- Scanning floor overlay -->
-  <div id="scan-overlay" class="hidden">
-    <div class="scan-inner">
-      <div class="scan-dots">
-        <span class="dot"></span>
-        <span class="dot"></span>
-        <span class="dot"></span>
-      </div>
-      <p class="scan-title">Scanning floor…</p>
-      <p class="scan-hint">Point your camera at the ground</p>
-    </div>
-  </div>
 </div>
 
 
-<!-- ═══════════════════════════════════════════════════════
-     STATE 3 — TRANSFORM BOTTOM SHEET
-════════════════════════════════════════════════════════ -->
-<div id="transform-sheet">
-  <div class="sheet-handle"></div>
+<div id="toast"></div>
 
-  <div class="sheet-section">
-    <div class="sheet-label">Size</div>
-    <div class="slider-row">
-      <input type="range" id="scale-slider" min="0.1" max="3.0" step="0.05" value="0.5"
-             oninput="onScaleChange(this.value)" />
-      <span class="scale-label" id="scale-display">0.5x</span>
-    </div>
-  </div>
-
-  <div class="sheet-section">
-    <div class="sheet-label">Rotate</div>
-    <div class="rotate-row">
-      <button class="rotate-btn" onclick="rotateSelected(-45)">↺</button>
-      <button class="rotate-btn" onclick="rotateSelected(45)">↻</button>
-    </div>
-  </div>
-
-  <div class="sheet-section">
-    <div class="sheet-label">Actions</div>
-    <div class="action-row">
-      <button class="action-btn duplicate" onclick="duplicateSelected()">📋 Duplicate</button>
-      <button class="action-btn delete"    onclick="deleteSelected()">🗑 Delete</button>
-    </div>
-  </div>
-
-  <button class="sheet-done-btn" onclick="deselectObject()">Done</button>
-</div>
-
-
-<!-- ═══════════════════════════════════════════════════════
-     A-Frame only — no AR.js needed
-════════════════════════════════════════════════════════ -->
-<script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
 
 <script>
-// ─────────────────────────────────────────────────────────
-//  DATA
-// ─────────────────────────────────────────────────────────
 const MODELS = [
   { id: 'chair',        emoji: '🪑', name: 'Chair',        desc: 'Classic seating element' },
   { id: 'office_chair', emoji: '💺', name: 'Office Chair', desc: 'Ergonomic swivel seating' },
@@ -730,78 +246,19 @@ const MODELS = [
   { id: 'table',        emoji: '🪵', name: 'Table',        desc: 'Shared outdoor surface' },
 ];
 
-// ─────────────────────────────────────────────────────────
-//  STATE
-// ─────────────────────────────────────────────────────────
-let selectedModelId   = 'chair';
-let placedObjects     = [];
-let selectedObjectId  = null;
-let objectCounter     = 0;
-let cameraStream      = null;
-let arReady           = false;
-let scanningFloor     = false;
-let canPlace          = false;
-let latestOrientation = { alpha: 0, beta: 90, gamma: 0 };
+// ─── INIT ────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  buildPickerGrid();
 
-// ─────────────────────────────────────────────────────────
-//  DEVICE ORIENTATION → CAMERA ROTATION
-//  Bypasses A-Frame look-controls (broken on iOS Safari).
-//  Drives the camera directly from raw DeviceOrientationEvent.
-// ─────────────────────────────────────────────────────────
-const STABILITY_READINGS = 6;   // ~0.6s window at 10Hz
-const STABILITY_MAX_VAR  = 3.0; // degrees variance threshold
-const betaHistory        = [];
-let   autoCalibTimer     = null;
+  const viewer = document.getElementById('model-view');
+  viewer.addEventListener('ar-status', (e) => {
+    if (e.detail.status === 'failed') {
+      showToast('AR not supported on this browser — try iOS Safari or Android Chrome');
+    }
+  });
+});
 
-window.addEventListener('deviceorientation', (e) => {
-  if (e.beta === null) return;
-
-  latestOrientation = { alpha: e.alpha || 0, beta: e.beta, gamma: e.gamma || 0 };
-
-  // Update A-Frame camera rotation directly
-  const camera = document.getElementById('ar-camera');
-  if (camera && arReady) {
-    camera.setAttribute('rotation', {
-      x:  90 - e.beta,     // 0 = looking forward, positive = looking down
-      y: -e.alpha,         // compass heading → yaw
-      z: -e.gamma,         // roll
-    });
-  }
-
-  if (scanningFloor) tryAutoCalibrate(e.beta);
-}, { passive: true });
-
-function tryAutoCalibrate(beta) {
-  betaHistory.push(beta);
-  if (betaHistory.length > STABILITY_READINGS) betaHistory.shift();
-  if (betaHistory.length < STABILITY_READINGS) return;
-
-  const avg      = betaHistory.reduce((a, b) => a + b, 0) / STABILITY_READINGS;
-  const variance = Math.max(...betaHistory.map(b => Math.abs(b - avg)));
-
-  if (variance < STABILITY_MAX_VAR) {
-    clearTimeout(autoCalibTimer);
-    floorFound();
-  }
-}
-
-function floorFound() {
-  scanningFloor = false;
-  canPlace = true;
-  const overlay = document.getElementById('scan-overlay');
-  overlay.classList.add('found');
-  document.querySelector('.scan-title').textContent = '✅ Floor found!';
-  document.querySelector('.scan-hint').textContent  = 'Tap anywhere to place';
-  document.getElementById('crosshair').classList.add('visible');
-  setTimeout(() => overlay.classList.add('hidden'), 1200);
-  showTapHint();
-}
-
-// ─────────────────────────────────────────────────────────
-//  INIT
-// ─────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', buildPickerGrid);
-
+// ─── PICKER ──────────────────────────────────────────────
 function buildPickerGrid() {
   const grid = document.getElementById('model-grid');
   grid.innerHTML = '';
@@ -812,7 +269,7 @@ function buildPickerGrid() {
       <div class="card-emoji">${m.emoji}</div>
       <div class="card-name">${m.name}</div>
       <div class="card-desc">${m.desc}</div>
-      <button class="card-btn" data-id="${m.id}">Place in AR</button>
+      <button class="card-btn">View in AR</button>
     `;
     card.addEventListener('pointerdown', (e) => {
       const r = document.createElement('span');
@@ -823,437 +280,46 @@ function buildPickerGrid() {
       card.appendChild(r);
       r.addEventListener('animationend', () => r.remove());
     });
-    card.querySelector('.card-btn').addEventListener('click', () => selectModelAndLaunchAR(m.id));
+    card.querySelector('.card-btn').addEventListener('click', () => selectModel(m.id));
     grid.appendChild(card);
   });
 }
 
-// ─────────────────────────────────────────────────────────
-//  SCREENS
-// ─────────────────────────────────────────────────────────
+// ─── SCREENS ─────────────────────────────────────────────
 function showScreen(id) {
-  ['picker-screen', 'permission-error', 'ar-screen'].forEach(sid => {
-    document.getElementById(sid).classList.toggle('hidden', sid !== id);
-  });
+  ['picker-screen', 'ar-screen'].forEach(sid =>
+    document.getElementById(sid).classList.toggle('hidden', sid !== id)
+  );
 }
 
 function showPicker() {
-  deselectObject();
-  stopReticleLoop();
-  arReady = false;
-  scanningFloor = false;
-  canPlace = false;
-  betaHistory.length = 0;
-  clearTimeout(autoCalibTimer);
-  document.getElementById('scan-overlay').classList.add('hidden');
-  document.getElementById('scan-overlay').classList.remove('found');
-  document.getElementById('crosshair').classList.remove('visible');
   showScreen('picker-screen');
+  const viewer = document.getElementById('model-view');
+  viewer.src = '';
 }
 
-// ─────────────────────────────────────────────────────────
-//  LAUNCH AR
-// ─────────────────────────────────────────────────────────
-async function selectModelAndLaunchAR(modelId) {
-  selectedModelId = modelId;
-  updatePill();
-  showScreen('ar-screen');
-  document.getElementById('ar-loading').classList.remove('hidden');
-  document.getElementById('loading-text').textContent = 'Starting camera…';
-
-  // 1. Start rear camera
-  try {
-    if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
-
-    cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: 'environment' },
-        width:  { ideal: 1280 },
-        height: { ideal: 720 },
-      },
-      audio: false,
-    });
-
-    const video = document.getElementById('camera-bg');
-    video.srcObject = cameraStream;
-    // iOS needs play() called explicitly after srcObject is set
-    await video.play().catch(err => console.warn('video.play():', err));
-
-  } catch (err) {
-    console.error('Camera error:', err);
-    showScreen('permission-error');
-    return;
-  }
-
-  // 2. Request device-orientation permission (iOS 13+ only)
-  document.getElementById('loading-text').textContent = 'Requesting motion access…';
-  if (typeof DeviceOrientationEvent !== 'undefined' &&
-      typeof DeviceOrientationEvent.requestPermission === 'function') {
-    try {
-      const perm = await DeviceOrientationEvent.requestPermission();
-      if (perm !== 'granted') {
-        console.warn('DeviceOrientation denied — gyroscope look-around disabled');
-      }
-    } catch (e) {
-      console.warn('DeviceOrientationEvent.requestPermission failed:', e);
-    }
-  }
-
-  // 3. Wait for A-Frame scene to be ready
-  document.getElementById('loading-text').textContent = 'Loading scene…';
-  const scene = document.getElementById('ar-scene');
-
-  if (scene.hasLoaded) {
-    onSceneReady();
-  } else {
-    scene.addEventListener('loaded', onSceneReady, { once: true });
-    // Fallback: proceed after 3s even if event didn't fire
-    setTimeout(onSceneReady, 3000);
-  }
-}
-
-function onSceneReady() {
-  if (arReady) return;
-  arReady = true;
-  document.getElementById('ar-loading').classList.add('hidden');
-  // Show scanning overlay — hides after phone stabilises
-  const overlay = document.getElementById('scan-overlay');
-  overlay.classList.remove('hidden', 'found');
-  document.querySelector('.scan-title').textContent = 'Hold still…';
-  document.querySelector('.scan-hint').textContent  = 'Finding floor level';
-  scanningFloor = true;
-  autoCalibTimer = setTimeout(floorFound, 2000);
-  startReticleLoop();
-}
-
-// ─────────────────────────────────────────────────────────
-//  RETICLE RAF LOOP
-// ─────────────────────────────────────────────────────────
-let reticleRAF = null;
-
-function startReticleLoop() {
-  const reticle = document.getElementById('reticle');
-  if (!reticle) return;
-  reticle.setAttribute('visible', 'true');
-
-  function tick() {
-    reticleRAF = requestAnimationFrame(tick);
-    const pt = computePlacementPoint();
-    // +0.01 prevents z-fighting if a ground plane is ever added
-    reticle.setAttribute('position', `${pt.x} ${pt.y + 0.01} ${pt.z}`);
-  }
-  reticleRAF = requestAnimationFrame(tick);
-}
-
-function stopReticleLoop() {
-  if (reticleRAF !== null) {
-    cancelAnimationFrame(reticleRAF);
-    reticleRAF = null;
-  }
-  const reticle = document.getElementById('reticle');
-  if (reticle) reticle.setAttribute('visible', 'false');
-}
-
-// ─────────────────────────────────────────────────────────
-//  TAP TO PLACE
-// ─────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  // Attach tap listener to ar-screen (covers whole view)
-  const arScreen = document.getElementById('ar-screen');
-  arScreen.addEventListener('click', onARTap);
-  arScreen.addEventListener('touchend', onARTap, { passive: false });
-});
-
-function onARTap(e) {
-  if (!arReady) return;
-
-  // Ignore taps on toolbar, sheet, loading overlay
-  const ignore = ['ar-toolbar', 'transform-sheet', 'ar-loading', 'tap-hint'];
-  for (const id of ignore) {
-    const el = document.getElementById(id);
-    if (el && el.contains(e.target)) return;
-  }
-
-  // If tapping a placed object → select it
-  if (e.target && e.target.closest) {
-    const entity = e.target.closest('[data-object-id]');
-    if (entity) {
-      selectObject(entity.dataset.objectId);
-      return;
-    }
-  }
-
-  if (!canPlace) return;
-  canPlace = false;
-  placeSelectedModel();
-  hideTapHint();
-  showToast('← Tap Back to place another item');
-}
-
-// ─────────────────────────────────────────────────────────
-//  RAY → GROUND PLANE INTERSECTION
-//  Returns world {x,y,z} for placement.
-//  Intersects the camera look-ray with virtual ground (y=0).
-//  Falls back to a point 2 m ahead at near-eye height when
-//  the camera isn't tilted downward enough.
-// ─────────────────────────────────────────────────────────
-function computePlacementPoint(offsetX = 0, offsetZ = 0) {
-  const camera = document.getElementById('ar-camera');
-  if (!camera) return { x: offsetX, y: 0, z: -2 + offsetZ };
-
-  const camPos = camera.getAttribute('position') || { x: 0, y: 1.6, z: 0 };
-  const camRot = camera.getAttribute('rotation') || { x: 0, y: 0, z: 0 };
-
-  const DEG   = Math.PI / 180;
-  const pitch = (camRot.x || 0) * DEG;
-  const yaw   = (camRot.y || 0) * DEG;
-
-  // A-Frame forward vector from pitch + yaw
-  const dirX =  Math.cos(pitch) * Math.sin(yaw);
-  const dirY = -Math.sin(pitch);
-  const dirZ = -Math.cos(pitch) * Math.cos(yaw);
-
-  // Ray-ground-plane (y=0) intersection
-  if (dirY < -0.05 && camPos.y > 0) {
-    const t = -camPos.y / dirY;
-    if (t > 0 && t < 15) {
-      return {
-        x: parseFloat((camPos.x + t * dirX + offsetX).toFixed(3)),
-        y: 0,
-        z: parseFloat((camPos.z + t * dirZ + offsetZ).toFixed(3)),
-      };
-    }
-  }
-
-  // Fallback: 2 m ahead at slightly below eye level
-  return {
-    x: parseFloat((camPos.x + dirX * 2 + offsetX).toFixed(3)),
-    y: parseFloat(((camPos.y || 1.6) - 0.3).toFixed(3)),
-    z: parseFloat((camPos.z + dirZ * 2 + offsetZ).toFixed(3)),
-  };
-}
-
-// ─────────────────────────────────────────────────────────
-//  PLACE
-// ─────────────────────────────────────────────────────────
-function placeSelectedModel(offsetX = 0, offsetZ = 0) {
-  const scene  = document.getElementById('ar-scene');
-  const camera = document.getElementById('ar-camera');
-  if (!scene || !camera) return null;
-
-  objectCounter++;
-  const uid = `obj-${objectCounter}`;
-
-  const pt           = computePlacementPoint(offsetX, offsetZ);
-  const DEFAULT_SCALE = 0.5;
-
-  const entity = document.createElement('a-entity');
-  entity.setAttribute('id', uid);
-  entity.setAttribute('data-object-id', uid);
-  entity.setAttribute('class', 'placeable');
-  entity.setAttribute('gltf-model', `url(models/${selectedModelId}.glb)`);
-  entity.setAttribute('position', `${pt.x} ${pt.y} ${pt.z}`);
-  entity.setAttribute('scale', `${DEFAULT_SCALE} ${DEFAULT_SCALE} ${DEFAULT_SCALE}`);
-  entity.setAttribute('rotation', '0 0 0');
-  entity.setAttribute('data-model-id', selectedModelId);
-  entity.setAttribute('data-scale', String(DEFAULT_SCALE));
-  entity.setAttribute('data-rotation-y', '0');
-
-  // Ground marker — flat circle under the object at y=0
-  const marker = document.createElement('a-circle');
-  marker.setAttribute('radius', '0.25');
-  marker.setAttribute('rotation', '-90 0 0');
-  marker.setAttribute('position', `0 ${-pt.y} 0`);
-  marker.setAttribute('material', 'color: #3a86ff; opacity: 0.3; shader: flat; side: double');
-  entity.appendChild(marker);
-
-  const capturedModelId = selectedModelId;
-  entity.addEventListener('model-loaded', () => {
-    showToast(`✅ ${capturedModelId.replace('_', ' ')} placed`);
-  }, { once: true });
-
-  entity.addEventListener('model-error', () => {
-    const fallback = { chair: '#e63946', office_chair: '#2a9d8f', sofa: '#e9c46a', table: '#264653' };
-    showToast(`⚠️ Could not load ${capturedModelId.replace('_', ' ')} — showing placeholder`);
-    entity.removeAttribute('gltf-model');
-    entity.setAttribute('geometry', 'primitive: box; width: 0.6; height: 0.8; depth: 0.6');
-    entity.setAttribute('material', `color: ${fallback[capturedModelId] || '#888'}; roughness: 0.6`);
-    entity.setAttribute('scale', '1 1 1');
-    entity.setAttribute('data-scale', '1');
-    document.getElementById('scale-slider').value = 1;
-    document.getElementById('scale-display').textContent = '1.0x';
-  }, { once: true });
-
-  entity.addEventListener('click', () => selectObject(uid));
-  entity.addEventListener('touchend', (ev) => { ev.stopPropagation(); selectObject(uid); });
-
-  scene.appendChild(entity);
-  placedObjects.push({ id: uid, modelId: selectedModelId, el: entity });
-  updateObjectCount();
-  return uid;
-}
-
-// ─────────────────────────────────────────────────────────
-//  SELECTION
-// ─────────────────────────────────────────────────────────
-function selectObject(uid) {
-  if (selectedObjectId && selectedObjectId !== uid) {
-    const prev = document.getElementById(selectedObjectId);
-    if (prev) prev.style.filter = '';
-  }
-
-  selectedObjectId = uid;
-  const entity = document.getElementById(uid);
-  if (!entity) return;
-
-  // Brief pulse via style animation
-  entity.setAttribute('animation__pulse',
-    'property: scale; dir: alternate; dur: 150; easing: easeInOutSine; loop: 2; to: 1.08 1.08 1.08');
-
-  const currentScale = parseFloat(entity.getAttribute('data-scale') || '0.5');
-  document.getElementById('scale-slider').value = currentScale;
-  document.getElementById('scale-display').textContent = currentScale.toFixed(1) + 'x';
-
-  openSheet();
-}
-
-function deselectObject() {
-  selectedObjectId = null;
-  closeSheet();
-}
-
-// ─────────────────────────────────────────────────────────
-//  TRANSFORMS
-// ─────────────────────────────────────────────────────────
-function onScaleChange(val) {
-  const v = parseFloat(val);
-  document.getElementById('scale-display').textContent = v.toFixed(1) + 'x';
-  if (!selectedObjectId) return;
-  const entity = document.getElementById(selectedObjectId);
-  if (!entity) return;
-  entity.setAttribute('scale', `${v} ${v} ${v}`);
-  entity.setAttribute('data-scale', v);
-}
-
-function rotateSelected(degrees) {
-  if (!selectedObjectId) return;
-  const entity = document.getElementById(selectedObjectId);
-  if (!entity) return;
-  const current = parseFloat(entity.getAttribute('data-rotation-y') || '0');
-  const next = (current + degrees + 360) % 360;
-  entity.setAttribute('rotation', `0 ${next} 0`);
-  entity.setAttribute('data-rotation-y', next);
-}
-
-function duplicateSelected() {
-  if (!selectedObjectId) return;
-  const entity = document.getElementById(selectedObjectId);
-  if (!entity) return;
-
-  const origModel = entity.getAttribute('data-model-id') || selectedModelId;
-  const origScale = parseFloat(entity.getAttribute('data-scale') || '1.0');
-  const origRotY  = parseFloat(entity.getAttribute('data-rotation-y') || '0');
-
-  const prev = selectedModelId;
-  selectedModelId = origModel;
-  const uid = placeSelectedModel(0.6, 0.6);
-  selectedModelId = prev;
-
-  if (!uid) return;
-  const clone = document.getElementById(uid);
-  if (!clone) return;
-  clone.setAttribute('scale', `${origScale} ${origScale} ${origScale}`);
-  clone.setAttribute('data-scale', origScale);
-  clone.setAttribute('rotation', `0 ${origRotY} 0`);
-  clone.setAttribute('data-rotation-y', origRotY);
-
-  deselectObject();
-  selectObject(uid);
-}
-
-function deleteSelected() {
-  if (!selectedObjectId) return;
-  const entity = document.getElementById(selectedObjectId);
-  if (entity && entity.parentNode) entity.parentNode.removeChild(entity);
-  placedObjects = placedObjects.filter(o => o.id !== selectedObjectId);
-  selectedObjectId = null;
-  closeSheet();
-  updateObjectCount();
-}
-
-function clearAllObjects() {
-  placedObjects.forEach(o => { if (o.el && o.el.parentNode) o.el.parentNode.removeChild(o.el); });
-  placedObjects = [];
-  selectedObjectId = null;
-  closeSheet();
-  updateObjectCount();
-  showTapHint();
-}
-
-// ─────────────────────────────────────────────────────────
-//  SHEET
-// ─────────────────────────────────────────────────────────
-function openSheet()  { document.getElementById('transform-sheet').classList.add('open'); }
-function closeSheet() { document.getElementById('transform-sheet').classList.remove('open'); }
-
-// ─────────────────────────────────────────────────────────
-//  UI HELPERS
-// ─────────────────────────────────────────────────────────
-function updatePill() {
-  const m = MODELS.find(x => x.id === selectedModelId);
+function selectModel(modelId) {
+  const m = MODELS.find(x => x.id === modelId);
   if (!m) return;
-  document.getElementById('pill-emoji').textContent = m.emoji;
-  document.getElementById('pill-name').textContent  = m.name;
+
+  document.getElementById('model-title').textContent = m.name;
+
+  const viewer = document.getElementById('model-view');
+  viewer.src = `models/${modelId}.glb`;
+  viewer.alt = m.name;
+
+  showScreen('ar-screen');
 }
 
-function updateObjectCount() {
-  const n = placedObjects.length;
-  document.getElementById('object-count').textContent = `${n} object${n !== 1 ? 's' : ''}`;
-}
-
-function showTapHint() {
-  const hint = document.getElementById('tap-hint');
-  hint.classList.remove('hidden');
-  clearTimeout(showTapHint._t);
-  showTapHint._t = setTimeout(hideTapHint, 5000);
-}
-
-function hideTapHint() {
-  document.getElementById('tap-hint').classList.add('hidden');
-}
-
-// ─────────────────────────────────────────────────────────
-//  TOAST
-// ─────────────────────────────────────────────────────────
+// ─── TOAST ───────────────────────────────────────────────
 let _toastTimer = null;
-
-function showToast(msg, durationMs = 3500) {
-  let toast = document.getElementById('ar-toast');
-  if (!toast) {
-    toast = document.createElement('div');
-    toast.id = 'ar-toast';
-    document.body.appendChild(toast);
-  }
-  toast.textContent = msg;
-  toast.classList.add('show');
+function showToast(msg, ms = 3500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
   clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => toast.classList.remove('show'), durationMs);
+  _toastTimer = setTimeout(() => t.classList.remove('show'), ms);
 }
-
-// ─────────────────────────────────────────────────────────
-//  PREVENT SCROLL / PINCH ZOOM ON AR VIEW
-// ─────────────────────────────────────────────────────────
-document.addEventListener('touchmove', (e) => {
-  const arScreen = document.getElementById('ar-screen');
-  if (!arScreen.classList.contains('hidden')) {
-    if (document.getElementById('transform-sheet').contains(e.target)) return;
-    e.preventDefault();
-  }
-}, { passive: false });
-
-document.addEventListener('gesturestart',  e => e.preventDefault());
-document.addEventListener('gesturechange', e => e.preventDefault());
-document.addEventListener('gestureend',    e => e.preventDefault());
 </script>
 </body>
 </html>
