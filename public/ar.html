@@ -251,10 +251,10 @@
   ></model-viewer>
 
   <div id="ar-footer">
-    <button id="ar-btn" disabled onclick="startAR()">
+    <button id="ar-btn" onclick="startAR()">
       <span>📷</span> Place in Your Room
     </button>
-    <p id="ar-status">Loading model…</p>
+    <p id="ar-status">Loading 3D preview…</p>
   </div>
 
 </div>
@@ -278,37 +278,38 @@ document.addEventListener('DOMContentLoaded', () => {
   const viewer = document.getElementById('model-view');
 
   viewer.addEventListener('load', () => {
-    const btn    = document.getElementById('ar-btn');
-    const status = document.getElementById('ar-status');
-    btn.disabled = false;
-    if (viewer.canActivateAR) {
-      status.textContent = 'Tap to place it in your space';
-    } else {
-      status.textContent = 'AR needs iOS Safari or Android Chrome over HTTPS';
-    }
+    document.getElementById('ar-status').textContent = 'Tap the button to place in your space';
   });
 
   viewer.addEventListener('error', () => {
-    document.getElementById('ar-status').textContent = 'Failed to load model';
+    document.getElementById('ar-status').textContent = 'Could not load model file';
   });
 
   viewer.addEventListener('ar-status', (e) => {
     if (e.detail.status === 'failed') {
-      showToast('Could not start AR — check camera permissions and try again');
+      showToast('AR failed — check camera permission and that you\'re on HTTPS');
     }
   });
 });
 
 async function startAR() {
   const viewer = document.getElementById('model-view');
-  if (!viewer.canActivateAR) {
-    showToast('AR not available — needs iOS Safari 15.4+ or Android Chrome over HTTPS');
+
+  // model-viewer web component not registered yet (script still loading)
+  if (typeof viewer.activateAR !== 'function') {
+    showToast('Still loading — please wait a moment and try again');
     return;
   }
+
   try {
     await viewer.activateAR();
   } catch (e) {
-    showToast('AR failed to start: ' + (e.message || e));
+    const msg = e?.message || String(e);
+    if (msg.includes('not supported') || msg.includes('XR')) {
+      showToast('AR not supported on this browser — use iOS Safari or Android Chrome');
+    } else {
+      showToast('Could not start AR: ' + msg);
+    }
   }
 }
 
@@ -350,8 +351,7 @@ function showPicker() {
   showScreen('picker-screen');
   const viewer = document.getElementById('model-view');
   viewer.src = '';
-  document.getElementById('ar-btn').disabled = true;
-  document.getElementById('ar-status').textContent = 'Loading model…';
+  document.getElementById('ar-status').textContent = 'Loading 3D preview…';
 }
 
 function selectModel(modelId) {
