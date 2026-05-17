@@ -524,30 +524,20 @@
       min-width: 220px;
     }
 
-    .scan-ring {
-      width: 100px; height: 100px;
-      position: relative;
+    .scan-dots { display: flex; gap: 8px; align-items: center; height: 40px; }
+    .scan-dots .dot {
+      width: 10px; height: 10px;
+      background: var(--blue);
+      border-radius: 50%;
+      animation: dot-bounce 1.2s ease-in-out infinite;
     }
-
-    .scan-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-
-    .scan-track {
-      fill: none;
-      stroke: rgba(58,134,255,0.2);
-      stroke-width: 5;
+    .scan-dots .dot:nth-child(2) { animation-delay: 0.2s; }
+    .scan-dots .dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes dot-bounce {
+      0%, 100% { transform: translateY(0); opacity: 0.4; }
+      50%       { transform: translateY(-8px); opacity: 1; }
     }
-
-    .scan-arc {
-      fill: none;
-      stroke: #3a86ff;
-      stroke-width: 5;
-      stroke-linecap: round;
-      stroke-dasharray: 263.9; /* 2π × 42 */
-      stroke-dashoffset: 263.9; /* starts empty */
-      transition: stroke 0.3s;
-    }
-
-    #scan-overlay.found .scan-arc { stroke: #22c55e; }
+    #scan-overlay.found .dot { background: #22c55e; animation: none; transform: none; }
 
     .scan-title {
       font-size: 16px;
@@ -564,9 +554,6 @@
       text-align: center;
     }
 
-    @keyframes scan-spin {
-      to { transform: rotate(360deg); }
-    }
   </style>
 </head>
 <body>
@@ -685,11 +672,10 @@
   <!-- Scanning floor overlay -->
   <div id="scan-overlay" class="hidden">
     <div class="scan-inner">
-      <div class="scan-ring">
-        <svg viewBox="0 0 100 100">
-          <circle class="scan-track" cx="50" cy="50" r="42"/>
-          <circle id="scan-arc" class="scan-arc" cx="50" cy="50" r="42"/>
-        </svg>
+      <div class="scan-dots">
+        <span class="dot"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
       </div>
       <p class="scan-title">Scanning floor…</p>
       <p class="scan-hint">Point your camera at the ground</p>
@@ -759,7 +745,6 @@ let objectCounter     = 0;
 let cameraStream      = null;
 let arReady           = false;
 let scanningFloor     = false;
-let floorScanStart    = null;
 let latestOrientation = { alpha: 0, beta: 90, gamma: 0 };
 
 // ─────────────────────────────────────────────────────────
@@ -767,8 +752,10 @@ let latestOrientation = { alpha: 0, beta: 90, gamma: 0 };
 //  Bypasses A-Frame look-controls (broken on iOS Safari).
 //  Drives the camera directly from raw DeviceOrientationEvent.
 // ─────────────────────────────────────────────────────────
-const SCAN_MS = 1800;
-const CIRC    = 2 * Math.PI * 42; // SVG arc circumference for r=42
+const STABILITY_READINGS = 6;   // ~0.6s window at 10Hz
+const STABILITY_MAX_VAR  = 3.0; // degrees variance threshold
+const betaHistory        = [];
+let   autoCalibTimer     = null;
 
 window.addEventListener('deviceorientation', (e) => {
   if (e.beta === null) return;
@@ -785,25 +772,21 @@ window.addEventListener('deviceorientation', (e) => {
     });
   }
 
-  if (scanningFloor) checkFloorScan(e.beta);
+  if (scanningFloor) tryAutoCalibrate(e.beta);
 }, { passive: true });
 
-function checkFloorScan(beta) {
-  const lookingDown = beta < 68; // tilted >22° from vertical toward floor
-  if (lookingDown) {
-    if (!floorScanStart) floorScanStart = Date.now();
-    const p = Math.min(1, (Date.now() - floorScanStart) / SCAN_MS);
-    setScanProgress(p);
-    if (p >= 1) floorFound();
-  } else {
-    floorScanStart = null;
-    setScanProgress(0);
-  }
-}
+function tryAutoCalibrate(beta) {
+  betaHistory.push(beta);
+  if (betaHistory.length > STABILITY_READINGS) betaHistory.shift();
+  if (betaHistory.length < STABILITY_READINGS) return;
 
-function setScanProgress(p) {
-  const arc = document.getElementById('scan-arc');
-  if (arc) arc.style.strokeDashoffset = CIRC * (1 - p);
+  const avg      = betaHistory.reduce((a, b) => a + b, 0) / STABILITY_READINGS;
+  const variance = Math.max(...betaHistory.map(b => Math.abs(b - avg)));
+
+  if (variance < STABILITY_MAX_VAR) {
+    clearTimeout(autoCalibTimer);
+    floorFound();
+  }
 }
 
 function floorFound() {
@@ -862,8 +845,8 @@ function showPicker() {
   stopReticleLoop();
   arReady = false;
   scanningFloor = false;
-  floorScanStart = null;
-  setScanProgress(0);
+  betaHistory.length = 0;
+  clearTimeout(autoCalibTimer);
   document.getElementById('scan-overlay').classList.add('hidden');
   document.getElementById('scan-overlay').classList.remove('found');
   document.getElementById('crosshair').classList.remove('visible');
@@ -935,13 +918,13 @@ function onSceneReady() {
   if (arReady) return;
   arReady = true;
   document.getElementById('ar-loading').classList.add('hidden');
-  // Show scanning overlay — hides after floor is detected
+  // Show scanning overlay — hides after phone stabilises
   const overlay = document.getElementById('scan-overlay');
   overlay.classList.remove('hidden', 'found');
-  document.querySelector('.scan-title').textContent = 'Scanning floor…';
-  document.querySelector('.scan-hint').textContent  = 'Point your camera at the ground';
-  setScanProgress(0);
+  document.querySelector('.scan-title').textContent = 'Hold still…';
+  document.querySelector('.scan-hint').textContent  = 'Finding floor level';
   scanningFloor = true;
+  autoCalibTimer = setTimeout(floorFound, 2000);
   startReticleLoop();
 }
 
