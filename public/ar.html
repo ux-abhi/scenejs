@@ -745,6 +745,7 @@ let objectCounter     = 0;
 let cameraStream      = null;
 let arReady           = false;
 let scanningFloor     = false;
+let canPlace          = false;
 let latestOrientation = { alpha: 0, beta: 90, gamma: 0 };
 
 // ─────────────────────────────────────────────────────────
@@ -791,6 +792,7 @@ function tryAutoCalibrate(beta) {
 
 function floorFound() {
   scanningFloor = false;
+  canPlace = true;
   const overlay = document.getElementById('scan-overlay');
   overlay.classList.add('found');
   document.querySelector('.scan-title').textContent = '✅ Floor found!';
@@ -845,6 +847,7 @@ function showPicker() {
   stopReticleLoop();
   arReady = false;
   scanningFloor = false;
+  canPlace = false;
   betaHistory.length = 0;
   clearTimeout(autoCalibTimer);
   document.getElementById('scan-overlay').classList.add('hidden');
@@ -985,8 +988,11 @@ function onARTap(e) {
     }
   }
 
+  if (!canPlace) return;
+  canPlace = false;
   placeSelectedModel();
   hideTapHint();
+  showToast('← Tap Back to place another item');
 }
 
 // ─────────────────────────────────────────────────────────
