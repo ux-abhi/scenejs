@@ -121,19 +121,39 @@
       --poster-color: #111;
     }
 
-    /* toolbar floats over the top */
+    /* toolbar + footer live OUTSIDE #ar-screen as fixed overlays
+       so model-viewer's canvas cannot swallow their touch events */
+    #ar-toolbar, #ar-footer {
+      position: fixed;
+      left: 0; right: 0;
+      z-index: 9000;
+      display: none; /* hidden until AR screen is active */
+    }
+
     #ar-toolbar {
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      display: flex;
+      top: 0;
+      display: none;
       align-items: center;
       justify-content: space-between;
       padding: max(env(safe-area-inset-top), 12px) 16px 12px;
       background: rgba(0,0,0,0.65);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
-      z-index: 10;
     }
+
+    #ar-footer {
+      bottom: 0;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 20px 24px max(env(safe-area-inset-bottom), 24px);
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    #ar-toolbar.ar-visible { display: flex; }
+    #ar-footer.ar-visible  { display: flex; }
 
     .toolbar-btn {
       background: rgba(255,255,255,0.12);
@@ -148,21 +168,6 @@
     }
 
     #model-title { font-size: 15px; font-weight: 700; }
-
-    /* footer floats over the bottom */
-    #ar-footer {
-      position: absolute;
-      bottom: 0; left: 0; right: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 10px;
-      padding: 20px 24px max(env(safe-area-inset-bottom), 24px);
-      background: rgba(0,0,0,0.65);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      z-index: 10;
-    }
 
     #ar-btn {
       width: 100%;
@@ -230,16 +235,9 @@
 
 
 <!-- ═══════════════════════════════
-     AR VIEW
+     AR VIEW  (model-viewer only — no interactive children)
 ════════════════════════════════ -->
 <div id="ar-screen" class="screen hidden">
-
-  <div id="ar-toolbar">
-    <button class="toolbar-btn" onclick="showPicker()">← Back</button>
-    <span id="model-title">Chair</span>
-    <div style="width:80px"></div>
-  </div>
-
   <model-viewer
     id="model-view"
     ar
@@ -249,16 +247,22 @@
     shadow-intensity="1"
     alt="3D model"
   ></model-viewer>
-
-  <div id="ar-footer">
-    <button id="ar-btn" onclick="startAR()">
-      <span>📷</span> Place in Your Room
-    </button>
-    <p id="ar-status">Loading 3D preview…</p>
-  </div>
-
 </div>
 
+<!-- Fixed overlays — outside ar-screen so model-viewer cannot
+     swallow their touch events through its internal canvas -->
+<div id="ar-toolbar">
+  <button class="toolbar-btn" onclick="showPicker()">← Back</button>
+  <span id="model-title">Chair</span>
+  <div style="width:80px"></div>
+</div>
+
+<div id="ar-footer">
+  <button id="ar-btn" onclick="startAR()">
+    <span>📷</span> Place in Your Room
+  </button>
+  <p id="ar-status">Loading 3D preview…</p>
+</div>
 
 <div id="toast"></div>
 
@@ -367,10 +371,16 @@ function showScreen(id) {
   );
 }
 
+function showAROverlays(visible) {
+  ['ar-toolbar', 'ar-footer'].forEach(id =>
+    document.getElementById(id).classList.toggle('ar-visible', visible)
+  );
+}
+
 function showPicker() {
+  showAROverlays(false);
   showScreen('picker-screen');
-  const viewer = document.getElementById('model-view');
-  viewer.src = '';
+  document.getElementById('model-view').src = '';
   setStatus('Loading 3D preview…');
 }
 
@@ -385,6 +395,7 @@ function selectModel(modelId) {
   viewer.alt = m.name;
 
   showScreen('ar-screen');
+  showAROverlays(true);
 }
 
 // ─── TOAST ───────────────────────────────────────────────
