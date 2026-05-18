@@ -278,11 +278,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const viewer = document.getElementById('model-view');
 
   viewer.addEventListener('load', () => {
-    document.getElementById('ar-status').textContent = 'Tap the button to place in your space';
+    setStatus('✅ Model loaded — tap button to place in AR');
   });
 
-  viewer.addEventListener('error', () => {
-    document.getElementById('ar-status').textContent = 'Could not load model file';
+  viewer.addEventListener('error', (e) => {
+    setStatus('❌ Model load error: ' + (e.detail?.type || e.type || 'unknown'));
   });
 
   viewer.addEventListener('ar-status', (e) => {
@@ -290,7 +290,27 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast('AR failed — check camera permission and that you\'re on HTTPS');
     }
   });
+
+  // 3 s after page load: report whether model-viewer registered + file reachable
+  setTimeout(async () => {
+    const registered = !!customElements.get('model-viewer');
+    if (!registered) {
+      setStatus('❌ 3D viewer script not loaded (check network)');
+      return;
+    }
+    // probe the model file
+    try {
+      const r = await fetch('/models/chair.glb', { method: 'HEAD' });
+      if (!r.ok) setStatus('❌ Model file returned HTTP ' + r.status);
+    } catch (err) {
+      setStatus('❌ Cannot reach model file: ' + err.message);
+    }
+  }, 3000);
 });
+
+function setStatus(msg) {
+  document.getElementById('ar-status').textContent = msg;
+}
 
 async function startAR() {
   const viewer = document.getElementById('model-view');
@@ -351,7 +371,7 @@ function showPicker() {
   showScreen('picker-screen');
   const viewer = document.getElementById('model-view');
   viewer.src = '';
-  document.getElementById('ar-status').textContent = 'Loading 3D preview…';
+  setStatus('Loading 3D preview…');
 }
 
 function selectModel(modelId) {
