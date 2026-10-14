@@ -1,5 +1,5 @@
 # AR Scene Viewer
-### Siegen-Feuersbach Community Project
+###  Community Project
 
 A participatory urban design tool. Point your phone camera at the ground, pick a piece of community furniture, and place it in real space to explore design ideas together.
 
