@@ -56,7 +56,7 @@ export default function Home() {
           fontWeight: 500,
         }}
       >
-        Siegen-Feuersbach Community Project
+        AR Community Project
       </p>
 
       {/* Description */}
